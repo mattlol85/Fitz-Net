@@ -1,15 +1,18 @@
-import logo from './logo.svg';
 import './App.css';
 import React from 'react';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import Homepage from './Homepage';
+import NoPage from './NoPage';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <h1>Fitz-Net</h1>
-      </header>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/home" component={Homepage} > </Route>
+        <Route index element={<Homepage />} />
+        <Route path="*" element={<NoPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
