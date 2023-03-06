@@ -3,14 +3,14 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                sh 'pwd'
                 checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/mattlol85/Fitz-Net.git']]])
-                pwd()
             }
         }
         stage('Install Dependencies') {
             steps {
                 dir('fitznet-react-website') {
-                    pwd()
+                    sh 'pwd'
                     sh 'npm install'
                 }
             }
@@ -18,6 +18,7 @@ pipeline {
         stage('Build') {
             steps {
                 dir('fitznet-react-website') {
+                    sh 'pwd'
                     sh 'npm run build'
                 }
             }
