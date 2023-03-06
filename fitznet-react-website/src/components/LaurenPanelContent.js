@@ -5,22 +5,28 @@ import '../css/LaurenPanelContent.css';
 function LaurenPanelContent() {
   const cards = [
     {
-      title: 'Card 1',
-      description: 'This is the description for card 1.',
+      title: 'Hungry',
+      description: 'Need food. Immediately',
       link: '/card1',
-      buttonText: 'Go to Card 1',
+      buttonText: '🍗',
     },
     {
-      title: 'Card 2',
-      description: 'This is the description for card 2.',
+      title: 'Love',
+      description: 'Send love accross the internet',
       link: '/card2',
-      buttonText: 'Go to Card 2',
+      buttonText: '💙',
     },
     {
-      title: 'Card 3',
-      description: 'This is the description for card 3.',
+      title: 'Sad',
+      description: 'Someone is sad today',
       link: '/card3',
-      buttonText: 'Go to Card 3',
+      buttonText: '😥',
+    },
+    {
+      title: 'Happy',
+      description: 'Somone is happy today... I wonder who',
+      link: '/card2',
+      buttonText: '😊',
     },
   ];
 
