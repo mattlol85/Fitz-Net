@@ -3,32 +3,28 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                sh 'pwd'
                 checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/mattlol85/Fitz-Net.git']]])
             }
         }
         stage('Install Dependencies') {
             steps {
-                dir('${WORKSPACE}/fitznet-react-website') {
-                    sh 'pwd'
+                dir("${WORKSPACE}/fitznet-react-website") {
                     sh 'npm install'
                 }
             }
         }
         stage('Build') {
             steps {
-                dir('fitznet-react-website') {
-                    sh 'pwd'
+                dir("${WORKSPACE}/fitznet-react-website") {
                     sh 'npm run build'
                 }
             }
         }
         stage('Publish') {
             steps {
-                dir('fitznet-react-website/build') {
+                dir("${WORKSPACE}/fitznet-react-website/build") {
                     // sh 'rsync -avz . USER@SERVER:/var/www/html'
                     echo "\033[31mDONE\033[0m"
-
                 }
             }
         }
