@@ -1,6 +1,0 @@
-# Created at 2023-03-05T23:25:32.080
-OpenJDK 64-Bit Server VM warning: You have loaded library /tmp/libpi4j.so which might have disabled stack guard. The VM will try to fix the stack guard now.
-
-# Created at 2023-03-05T23:25:32.080
-It's highly recommended that you fix the library with 'execstack -c <libfile>', or link it with '-z noexecstack'.
-
