@@ -19,7 +19,11 @@ pipeline {
             }
         }
         stage('Publish') {
-            echo "Done!"
+            steps {
+                    // sh 'rsync -avz . USER@SERVER:/var/www/html'
+                    echo "\033[31mDONE\033[0m"
+
+            }
         }
     }
 }
