@@ -1,0 +1,36 @@
+.homepage-title {
+    animation: bounce 1s ease-in-out infinite;
+  }
+  
+  @keyframes bounce {
+    0% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  .homepage-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #F4F4F4;
+  }
+  
+  
+  .homepage-title {
+    font-size: 5rem;
+    text-align: center;
+  }
+  
+  @media (max-width: 768px) {
+    .homepage-title {
+      font-size: 3rem;
+    }
+  }
+  
