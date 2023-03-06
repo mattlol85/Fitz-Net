@@ -19,7 +19,9 @@
     justify-content: center;
     align-items: center;
     height: 100vh;
+    background-color: #F4F4F4;
   }
+  
   
   .homepage-title {
     font-size: 5rem;
