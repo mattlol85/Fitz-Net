@@ -7,25 +7,25 @@ function LaurenPanelContent() {
     {
       title: 'Hungry',
       description: 'Need food. Immediately',
-      link: '/card1',
+      link: 'https://www.google.com',
       buttonText: '🍗',
     },
     {
       title: 'Love',
       description: 'Send love accross the internet',
-      link: '/card2',
+      link: 'https://www.google.com',
       buttonText: '💙',
     },
     {
       title: 'Sad',
       description: 'Someone is sad today',
-      link: '/card3',
+      link: 'https://www.google.com',
       buttonText: '😥',
     },
     {
       title: 'Happy',
       description: 'Somone is happy today... I wonder who',
-      link: '/card2',
+      link: 'https://www.google.com',
       buttonText: '😊',
     },
   ];
