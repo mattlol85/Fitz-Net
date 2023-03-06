@@ -9,7 +9,7 @@ pipeline {
         }
         stage('Install Dependencies') {
             steps {
-                dir('fitznet-react-website') {
+                dir('${WORKSPACE}/fitznet-react-website') {
                     sh 'pwd'
                     sh 'npm install'
                 }
