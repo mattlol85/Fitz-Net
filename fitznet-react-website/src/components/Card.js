@@ -7,9 +7,9 @@ function Card(props) {
     <div className="card">
       <h2>{props.title}</h2>
       <p>{props.description}</p>
-      <Link to={props.link}>
+      <a href={props.link}>
         <button>{props.buttonText}</button>
-      </Link>
+      </a>
     </div>
   );
 }
