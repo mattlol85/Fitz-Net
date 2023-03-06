@@ -19,9 +19,7 @@ pipeline {
             }
         }
         stage('Publish') {
-            steps {
-                    // sh 'rsync -avz . USER@SERVER:/var/www/html'
-            }
+            echo "Done!"
         }
     }
 }
