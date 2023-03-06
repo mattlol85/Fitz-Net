@@ -8,7 +8,7 @@ pipeline {
         }
         stage('Install Dependencies') {
             steps {
-                sh 'cd "${WORKSPACE}/fitznet-react-website" && npm install'
+                sh 'ls'
 
             }
         }
