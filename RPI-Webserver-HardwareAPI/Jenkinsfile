@@ -5,16 +5,16 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                dir('RPI-Webserver-HardwareAPI'){
+                sh 'ls -la'
                 checkout([$class: 'GitSCM', branches: [[name: 'dev/panelRpiAPI']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'https://github.com/mattlol85/Fitz-Net.git']]])
-                }
+                sh 'ls -la'
             }
         }
         stage('Build') {
             steps {
-                dir('RPI-Webserver-HardwareAPI'){
+                sh 'ls -la'
                 sh 'mvn clean package'
-                }
+                sh 'ls -la'
             }
         }
     }
