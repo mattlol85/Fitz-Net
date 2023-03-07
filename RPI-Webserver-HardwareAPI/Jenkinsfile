@@ -12,9 +12,11 @@ pipeline {
         }
         stage('Build') {
             steps {
+                dir('RPI-Webserver-HardwareAPI') {
                 sh 'ls -la'
                 sh 'mvn clean package'
                 sh 'ls -la'
+            }
             }
         }
     }
