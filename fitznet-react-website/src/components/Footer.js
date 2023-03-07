@@ -5,7 +5,7 @@ import '../css/Footer.css';
 function Footer() {
   return (
     <div className="footer">
-      &copy; {new Date().getFullYear()} FitzNet.org by Matthew Fitzgerald
+      &copy; {new Date().getFullYear()} fitznet.org by Matthew Fitzgerald
     </div>
   );
 }
