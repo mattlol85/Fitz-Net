@@ -14,7 +14,7 @@ pipeline {
             steps {
                 dir('RPI-Webserver-HardwareAPI') {
                 sh 'ls -la'
-                sh 'mvn clean package'
+                sh 'sudo mvn clean package'
                 sh 'ls -la'
             }
             }
