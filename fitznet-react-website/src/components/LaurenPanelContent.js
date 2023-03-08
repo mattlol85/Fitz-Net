@@ -28,6 +28,12 @@ function LaurenPanelContent() {
       link: 'https://www.google.com',
       buttonText: '😊',
     },
+    {
+    title: 'Bored',
+    description: 'Bored Bored Bored',
+    link: 'https://www.google.com',
+    buttonText: '😑',
+  }
   ];
 
   return (
