@@ -1,6 +1,7 @@
 import React from 'react';
 import Card from '../components/Card';
 import '../css/LaurenPanelContent.css';
+import Slider from './Slider';
 
 function LaurenPanelContent() {
   const cards = [
@@ -12,7 +13,7 @@ function LaurenPanelContent() {
     },
     {
       title: 'Love',
-      description: 'Send love accross the internet',
+      description: 'Send love across the internet',
       link: 'https://www.google.com',
       buttonText: '💙',
     },
@@ -49,6 +50,9 @@ function LaurenPanelContent() {
           />
         ))}
       </div>
+      <div className="slider-contianer">
+          <Slider></Slider>
+        </div>
     </div>
   );
 }
