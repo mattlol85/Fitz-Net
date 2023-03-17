@@ -9,5 +9,4 @@ class RpiWebserverHardwareApiApplicationTests {
     @Test
     void contextLoads() {
     }
-
 }
