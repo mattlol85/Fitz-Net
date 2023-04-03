@@ -38,3 +38,13 @@
 .nav-links a:hover {
   color: #0077b6;
 }
+.logo-link {
+  display: flex;
+  align-items: center;
+}
+
+.logo-img {
+  max-width: 100%;
+  height: auto;
+  max-height: 50px;
+}
