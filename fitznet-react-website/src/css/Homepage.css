@@ -1,36 +1,18 @@
-.homepage-title {
-    animation: bounce 1s ease-in-out infinite;
-  }
-  
-  @keyframes bounce {
-    0% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-4px);
-    }
-    100% {
-      transform: translateY(0);
-    }
-  }
+.homepage-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: #fff;
+}
 
-  .homepage-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    background-color: #fff;
-  }
-  
-  
+.homepage-title {
+  font-size: 5rem;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
   .homepage-title {
-    font-size: 5rem;
-    text-align: center;
+    font-size: 3rem;
   }
-  
-  @media (max-width: 768px) {
-    .homepage-title {
-      font-size: 3rem;
-    }
-  }
-  
+}
