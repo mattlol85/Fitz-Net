@@ -1,5 +1,5 @@
 import React from 'react';
-import logo from '../img/FN_Logo_Animation.gif';
+import logo from '../img/FN_Logo_Animation_nonloop.gif';
 import '../css/BoxLogo.css';
 
 function BoxLogo() {
