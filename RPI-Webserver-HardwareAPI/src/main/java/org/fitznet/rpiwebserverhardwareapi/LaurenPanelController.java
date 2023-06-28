@@ -1,5 +1,6 @@
 package org.fitznet.rpiwebserverhardwareapi;
 
+import jakarta.annotation.PreDestroy;
 import org.fitznet.rpiwebserverhardwareapi.devices.MusicalBuzzer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +69,16 @@ public class LaurenPanelController {
         } catch (RuntimeIOException e) {
             return "Error toggling buzzer: " + e.getMessage();
         }
+    }
+
+    @PreDestroy
+    public void cleanup() {
+        LOGGER.debug("Cleaning up resources");
+        redLed.close();
+        greenLed.close();
+        blueLed.close();
+        yellowLed.close();
+        buzzer.close();
     }
 
 }
