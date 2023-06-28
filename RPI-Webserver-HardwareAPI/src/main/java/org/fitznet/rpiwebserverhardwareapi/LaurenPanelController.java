@@ -64,7 +64,7 @@ public class LaurenPanelController {
     @GetMapping("/buzzertest")
     public String getBuzzerTest() {
         try {
-            buzzer.playTone(2, 440);
+            buzzer.playTone(440, 2);
             return "Buzzer test complete!";
         } catch (RuntimeIOException e) {
             return "Error toggling buzzer: " + e.getMessage();
