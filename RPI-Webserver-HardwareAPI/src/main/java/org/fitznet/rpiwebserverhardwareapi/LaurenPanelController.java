@@ -2,11 +2,10 @@ package org.fitznet.rpiwebserverhardwareapi;
 
 import jakarta.annotation.PreDestroy;
 import org.fitznet.rpiwebserverhardwareapi.devices.MusicalBuzzer;
+import org.fitznet.rpiwebserverhardwareapi.dto.BuzzerRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import com.diozero.devices.LED;
 import com.diozero.api.RuntimeIOException;
 
@@ -62,9 +61,19 @@ public class LaurenPanelController {
     }
 
     @GetMapping("/buzzertest")
-    public String getBuzzerTest() {
+    public String getBuzzerTest(@RequestParam int  frequency, @RequestParam int duration) {
         try {
-            buzzer.playTone(440, 2);
+            buzzer.playTone(frequency, duration);
+            return "Buzzer test complete!";
+        } catch (RuntimeIOException e) {
+            return "Error toggling buzzer: " + e.getMessage();
+        }
+    }
+
+    @PostMapping("/buzzertest")
+    public String postBuzzerTest(@RequestBody BuzzerRequest request) {
+        try {
+            buzzer.playTone(request.getFrequency(), request.getDuration());
             return "Buzzer test complete!";
         } catch (RuntimeIOException e) {
             return "Error toggling buzzer: " + e.getMessage();
