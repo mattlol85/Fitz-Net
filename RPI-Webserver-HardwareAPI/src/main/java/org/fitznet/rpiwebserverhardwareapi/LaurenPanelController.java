@@ -17,7 +17,7 @@ public class LaurenPanelController {
     private final LED redLed = new LED(13);
     private final LED greenLed = new LED(26);
     private final LED blueLed = new LED(16);
-    private final LED yellowLed = new LED(12);
+    private final LED yellowLed = new LED(20);
     private final MusicalBuzzer buzzer = new MusicalBuzzer(12);
 
     @GetMapping("/hungry")
