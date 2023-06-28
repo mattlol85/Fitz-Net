@@ -14,11 +14,11 @@ import com.diozero.api.RuntimeIOException;
 @RequestMapping("/laurenpanel")
 public class LaurenPanelController {
     private static final Logger LOGGER = LoggerFactory.getLogger(LaurenPanelController.class);
-    private final LED redLed = new LED(13);
+    private final LED redLed = new LED(12);
     private final LED greenLed = new LED(26);
     private final LED blueLed = new LED(16);
     private final LED yellowLed = new LED(20);
-    private final MusicalBuzzer buzzer = new MusicalBuzzer(12);
+    private final MusicalBuzzer buzzer = new MusicalBuzzer(13);
 
     @GetMapping("/hungry")
     public String getHungry() {
