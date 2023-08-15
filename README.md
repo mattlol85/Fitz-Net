@@ -1,13 +1,5 @@
 <!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a name="readme-top"></a>
-<!--
-*** Thanks for checking out the Best-README-Template. If you have a suggestion
-*** that would make this better, please fork the repo and create a pull request
-*** or simply open an issue with the tag "enhancement".
-*** Don't forget to give the project a star!
-*** Thanks again! Now go create something AMAZING! :D
--->
-
 
 
 <!-- PROJECT SHIELDS -->
@@ -113,30 +105,39 @@ To get a local copy up and running follow these simple example steps.
 ### Prerequisites
 
 This is an example of how to list things you need to use the software and how to install them. Keep in mind that parts of the project are intened to run on specific hardware.
-* Install Node Package Manager (npm)
-  ```sh
-  npm install npm@latest -g
-  ```
+
+### Unix:
+
 * Update packages & Install JDK 17
   ```sh
   sudo apt update
-  sudo apt install openjdk-17-jdk
+  sudo apt install openjdk-17-jdk gradle git -y 
+* Install Node Package Manager (npm)
+  ```sh
+  sudo apt install npm
+  npm install npm@latest -g
   ```
-
+### Windows:
+*Info: Highly reccomend you use a WSL distro to work on this project.*
 ### Installation
 
-1. Clone the repo and refer to the README.md in each directory. There are instructions for each module of the Fitz-Net in their respective project folders.
+1. Clone the repo and initialize and update submodules.
    ```sh
    git clone https://github.com/mattlol85/Fitz-Net.git
+   cd Fitz-Net
+   git submodule init
+   git submodule update
    ```
-2. Website
+2. Open Website Repo
    ```sh
-   cd fitznet-react-website
+   cd fitz-net-website
    ```
-3. and or Website Companion API
+3. and or Fitz-Net API Repo
    ```sh
-   cd RPI-Webserver-HardwareAPI
+   cd fitz-net-api
    ```
+   *Warning: If the directories are empty make sure you run the submodule init and update commands!*
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
