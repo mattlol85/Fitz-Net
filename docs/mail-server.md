@@ -21,7 +21,7 @@ Mail ports (25, 465, 587, 993) are port-forwarded from the router directly to th
 
 ## Docker Compose
 
-Config lives in `Fitz-Net-Agent-Sandbox/mail/docker-compose.yml`. Roundcube joins the `fitznet` external network so `caddy-docker-proxy` can route to it via label.
+Config lives in `mail/docker-compose.yml` in this repo. Roundcube joins the `fitznet` external network so `caddy-docker-proxy` can route to it via label.
 
 ```yaml
 services:
@@ -100,7 +100,7 @@ docker network create fitznet   # skip if already done for the main stack
 ### 2. Start the Stack
 
 ```bash
-cd ~/fitznet-mail   # wherever docker-compose.yml lives on the host
+cd mail   # from the root of this repo
 docker compose up -d
 
 # Caddy will provision the mail.fitznet.org cert on first request.

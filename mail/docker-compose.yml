@@ -1,0 +1,68 @@
+# Prerequisites (run once on the host before first deploy):
+#   1. Ensure the external network exists:  docker network create fitznet
+#   2. Start the main fitznet stack first so Caddy can provision the
+#      mail.fitznet.org TLS cert before mailserver reads it.
+#   3. After first start, run: docker restart mailserver
+#
+# Deploy:
+#   docker compose up -d
+
+services:
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail.fitznet.org
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - ./dms/mail-data/:/var/mail/
+      - ./dms/mail-state/:/var/mail-state/
+      - ./dms/mail-logs/:/var/log/mail/
+      - ./dms/config/:/tmp/docker-mailserver/
+      - caddy_data:/caddy-certs:ro
+    environment:
+      - ENABLE_RSPAMD=1
+      - ENABLE_CLAMAV=0
+      - ENABLE_FAIL2BAN=1
+      - SSL_TYPE=manual
+      - SSL_CERT_PATH=/caddy-certs/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.crt
+      - SSL_KEY_PATH=/caddy-certs/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.key
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    restart: unless-stopped
+
+  roundcube:
+    image: roundcube/roundcubemail:latest
+    container_name: roundcube
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mail.fitznet.org
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mail.fitznet.org
+      - ROUNDCUBEMAIL_SMTP_PORT=587
+      - ROUNDCUBEMAIL_DB_TYPE=sqlite
+    volumes:
+      - roundcube-data:/var/roundcube/db
+    expose:
+      - "80"
+    labels:
+      caddy: mail.fitznet.org
+      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy_network: fitznet
+    networks:
+      - fitznet
+    restart: unless-stopped
+    depends_on:
+      - mailserver
+
+volumes:
+  roundcube-data:
+  caddy_data:
+    external: true
+
+networks:
+  fitznet:
+    external: true
