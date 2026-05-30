@@ -154,6 +154,22 @@ cd ../GamerBell
 
 ---
 
+## Commit Convention
+
+All repos use conventional commits with a scope:
+
+```
+feat(subject): description
+fix(subject): description
+chore(subject): description
+```
+
+- `feat` — new user-facing behavior
+- `fix` — bug fix
+- `chore` — maintenance, tooling, dependency updates, documentation
+
+---
+
 ## Reference: Existing fitz-net-api Endpoints
 
 | Method | Path | Auth | Request Body | Response |
