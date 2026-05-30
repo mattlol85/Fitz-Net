@@ -76,11 +76,12 @@ Fitz-Net is a self-hosted, full-stack personal platform running on a home server
 
 ### Infrastructure
 
-Traffic arrives at `fitznet.doomdns.org` (dynamic DNS pointed at the home router), is forwarded into the network, and lands on a Proxmox server. The active Ubuntu VM runs Docker, which hosts all services behind a Caddy reverse proxy. A second Ubuntu VM is kept idle as a spare/staging target.
+Traffic arrives at `fitznet.org`, which is fronted by an external reverse proxy that forwards to `fitznet.doomdns.org` (dynamic DNS on the home router). From there it reaches a Proxmox server where the active Ubuntu VM runs Docker, hosting all services behind a Caddy reverse proxy. A second Ubuntu VM is kept idle as a spare/staging target.
 
 ```mermaid
 graph TD
     Internet(["🌐 Internet"])
+    FitznetOrg["fitznet.org\nReverse Proxy"]
     DNS["fitznet.doomdns.org\nDynamic DNS"]
     Router["🏠 Home Router\nPort Forwarding"]
 
@@ -98,10 +99,10 @@ graph TD
 
     ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
 
-    Internet --> DNS --> Router --> Caddy
-    Caddy -->|"fitznet.org"| Website
-    Caddy -->|"api.fitznet.doomdns.org"| API
-    Caddy -->|"gamerbell.fitznet.doomdns.org"| Bell
+    Internet --> FitznetOrg --> DNS --> Router --> Caddy
+    Caddy --> Website
+    Caddy --> API
+    Caddy --> Bell
     API --> Mongo
     ESP32 -->|"wss"| Bell
 ```
