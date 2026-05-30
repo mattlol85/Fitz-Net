@@ -85,10 +85,10 @@ graph TD
     DNS["fitznet.doomdns.org\nDynamic DNS"]
     Router["🏠 Home Router\nPort Forwarding"]
 
-    subgraph Proxmox["Proxmox Server"]
+    subgraph Proxmox["Proxmox Server · 192.168.1.225"]
         VM1["Ubuntu VM 1\n⏸ Idle"]
 
-        subgraph VM2["Ubuntu VM 2 — Docker"]
+        subgraph VM2["Ubuntu VM 2 · 192.168.1.59 — Docker"]
             Caddy["Caddy\nReverse Proxy"]
             Website["fitz-net-website\nReact SPA"]
             API["fitz-net-api\nSpring Boot REST"]
