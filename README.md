@@ -76,7 +76,7 @@ Fitz-Net is a self-hosted, full-stack personal platform running on a home server
 
 ### Infrastructure
 
-Traffic arrives at `fitznet.doomdns.org` (dynamic DNS pointed at the home router), is forwarded into the network, and lands on a Proxmox server. The active LXC container runs Docker, which hosts all services behind a Caddy reverse proxy. A second container is kept idle as a spare/staging target.
+Traffic arrives at `fitznet.doomdns.org` (dynamic DNS pointed at the home router), is forwarded into the network, and lands on a Proxmox server. The active Ubuntu VM runs Docker, which hosts all services behind a Caddy reverse proxy. A second Ubuntu VM is kept idle as a spare/staging target.
 
 ```mermaid
 graph TD
@@ -85,9 +85,9 @@ graph TD
     Router["🏠 Home Router\nPort Forwarding"]
 
     subgraph Proxmox["Proxmox Server"]
-        CT1["LXC Container 1\n⏸ Idle"]
+        VM1["Ubuntu VM 1\n⏸ Idle"]
 
-        subgraph CT2["LXC Container 2 — Docker"]
+        subgraph VM2["Ubuntu VM 2 — Docker"]
             Caddy["Caddy\nReverse Proxy"]
             Website["fitz-net-website\nReact SPA"]
             API["fitz-net-api\nSpring Boot REST"]
