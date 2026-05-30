@@ -1,3 +1,10 @@
+# Prerequisites (run once on the host before first deploy):
+#   1. Create the external network:  docker network create fitznet
+#   2. Copy .env.example to .env and fill in secrets
+#
+# Deploy:
+#   docker compose up -d
+
 services:
   gamerbell:
     image: mattlol85/bell-api:latest
