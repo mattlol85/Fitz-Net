@@ -3,13 +3,6 @@
 
 
 <!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -29,12 +22,12 @@
 <h3 align="center">Fitz-Net</h3>
 
   <p align="center">
-    A collection of software to host @Mattlol85's ideas
+    A self-hosted platform for @mattlol85's ideas — running on bare metal, served to the internet.
     <br />
     <a href="https://github.com/mattlol85/Fitz-Net"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/mattlol85/Fitz-Net">View Demo</a>
+    <a href="https://fitznet.org">Live Site</a>
     ·
     <a href="https://github.com/mattlol85/Fitz-Net/issues">Report Bug</a>
     ·
@@ -48,25 +41,20 @@
 <details>
   <summary>Table of Contents</summary>
   <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
+    <li><a href="#about-the-project">About The Project</a></li>
+    <li><a href="#architecture">Architecture</a>
       <ul>
-        <li><a href="#built-with">Built With</a></li>
+        <li><a href="#infrastructure">Infrastructure</a></li>
+        <li><a href="#services">Services</a></li>
       </ul>
     </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
+    <li><a href="#repositories">Repositories</a></li>
+    <li><a href="#built-with">Built With</a></li>
+    <li><a href="#getting-started">Getting Started</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
 
@@ -77,20 +65,122 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://fitznet.org)
 
-The Fitz-Net is a long standing idea of what I, [@mattlol85](https://github.com/mattlol85)  have always wanted and dreamed of. At the bare minimum, the Fitz-Net is a website that I can develop new ideas on, and have a physical place on the internet to access it from. Currently, there are two main components to the Fitz-Net, a React-based website, and a Spring API to go alongside it.
+Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a reverse proxy, and physical ESP32 hardware that talks to the backend over WebSockets.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-### Built With
+<!-- ARCHITECTURE -->
+## Architecture
 
-* [![node][node]][node-url]
+### Infrastructure
+
+Traffic arrives at `fitznet.doomdns.org` (dynamic DNS pointed at the home router), is forwarded into the network, and lands on a Proxmox server. The active LXC container runs Docker, which hosts all services behind a Caddy reverse proxy. A second container is kept idle as a spare/staging target.
+
+```mermaid
+graph TD
+    Internet(["🌐 Internet"])
+    DNS["fitznet.doomdns.org\nDynamic DNS"]
+    Router["🏠 Home Router\nPort Forwarding"]
+
+    subgraph Proxmox["Proxmox Server"]
+        CT1["LXC Container 1\n⏸ Idle"]
+
+        subgraph CT2["LXC Container 2 — Docker"]
+            Caddy["Caddy\nReverse Proxy"]
+            Website["fitz-net-website\nReact SPA"]
+            API["fitz-net-api\nSpring Boot REST"]
+            Bell["GamerBell\nWebSocket + OTA"]
+            Mongo["MongoDB"]
+        end
+    end
+
+    ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
+
+    Internet --> DNS --> Router --> Caddy
+    Caddy -->|"fitznet.org"| Website
+    Caddy -->|"api.fitznet.doomdns.org"| API
+    Caddy -->|"gamerbell.fitznet.doomdns.org"| Bell
+    API --> Mongo
+    ESP32 -->|"wss"| Bell
+```
+
+### Services
+
+The four services and how they interact at the application layer:
+
+```mermaid
+graph LR
+    Browser(["🖥 Browser"])
+    ESP32(["📟 ESP32 Device"])
+
+    subgraph Website["fitz-net-website · React 19 + Vite"]
+        React["App"]
+        AuthCtx["AuthContext\nJWT · localStorage"]
+        ApiSvc["api.js\nfetch wrapper"]
+        WSClient["STOMP WebSocket\nClient"]
+    end
+
+    subgraph API["fitz-net-api · Spring Boot 3.4"]
+        SecFilter["JWT Auth Filter"]
+        Controllers["Controllers"]
+        Services["Services"]
+        Repos["Repositories"]
+    end
+
+    subgraph Bell["GamerBell · Spring Boot 3.4"]
+        WSHandler["ButtonWebSocket\nHandler"]
+        BellSvc["ButtonService\nSession Pool"]
+        FirmSvc["FirmwareService\nOTA Cache"]
+    end
+
+    Mongo[("MongoDB")]
+    GitHub(["GitHub Releases\nOTA Firmware"])
+
+    Browser --> React
+    React --> AuthCtx --> ApiSvc
+    ApiSvc -->|"REST / HTTPS"| SecFilter
+    SecFilter --> Controllers --> Services --> Repos --> Mongo
+
+    React --> WSClient
+    WSClient -->|"wss"| WSHandler
+    WSHandler --> BellSvc -->|"broadcast"| WSClient
+
+    ESP32 -->|"wss"| WSHandler
+    ESP32 -->|"GET /api/firmware/latest"| FirmSvc
+    FirmSvc -->|"fetch .bin"| GitHub
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- REPOSITORIES -->
+## Repositories
+
+| Repo | Description |
+|---|---|
+| [Fitz-Net](https://github.com/mattlol85/Fitz-Net) | This repo — orchestration hub, GitHub Actions, shared agent docs |
+| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | Spring Boot 3.4 REST API — user management, auth, encryption |
+| [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React 19 SPA — dashboard, live board, game stats, auth |
+| [GamerBell](https://github.com/mattlol85/GamerBell) | Spring Boot WebSocket relay + OTA firmware server for ESP32 bells |
+| [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | C++ / PlatformIO firmware for the physical ESP32 bell button |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- BUILT WITH -->
+## Built With
+
 * [![React][React]][React-url]
 * [![Spring][Spring]][Spring-url]
 * [![Java][Java]][java-url]
-* [![Jenkins][Jenkins]][Jenkins-url]
-
+* [![Node][node]][node-url]
+* [![MongoDB][MongoDB]][MongoDB-url]
+* [![Docker][Docker]][Docker-url]
+* [![Caddy][Caddy]][Caddy-url]
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -99,56 +189,35 @@ The Fitz-Net is a long standing idea of what I, [@mattlol85](https://github.com/
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+Each component lives in its own repository. Clone the ones you need:
 
-### Prerequisites
+```sh
+git clone https://github.com/mattlol85/fitz-net-api.git
+git clone https://github.com/mattlol85/fitz-net-website.git
+git clone https://github.com/mattlol85/GamerBell.git
+git clone https://github.com/mattlol85/Esp32FitznetBell.git
+```
 
-This is an example of how to list things you need to use the software and how to install them. Keep in mind that parts of the project are intened to run on specific hardware.
+**fitz-net-api** — requires Java 21 and MongoDB:
+```sh
+cd fitz-net-api
+./gradlew bootRun
+```
 
-### Unix:
+**fitz-net-website** — requires Node.js:
+```sh
+cd fitz-net-website
+npm install
+npm run dev
+```
 
-* Update packages & Install JDK 17
-  ```sh
-  sudo apt update
-  sudo apt install openjdk-17-jdk gradle git -y 
-* Install Node Package Manager (npm)
-  ```sh
-  sudo apt install npm
-  npm install npm@latest -g
-  ```
-### Windows:
-*Info: Highly reccomend you use a WSL distro to work on this project.*
-### Installation
+**GamerBell** — requires Java 21:
+```sh
+cd GamerBell
+./gradlew bootRun --args='--spring.profiles.active=dev'
+```
 
-1. Clone the repo and initialize and update submodules.
-   ```sh
-   git clone https://github.com/mattlol85/Fitz-Net.git
-   cd Fitz-Net
-   git submodule init
-   git submodule update
-   ```
-2. Open Website Repo
-   ```sh
-   cd fitz-net-website
-   ```
-3. and or Fitz-Net API Repo
-   ```sh
-   cd fitz-net-api
-   ```
-   *Warning: If the directories are empty make sure you run the submodule init and update commands!*
-
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- USAGE EXAMPLES -->
-## Usage
-
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
-
-_For more examples, please refer to the [Documentation](https://example.com)_
+See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -157,12 +226,15 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- ROADMAP -->
 ## Roadmap
 
-- [ ] Complete a 1.0 release of Fitz-Net and its modules
-- [ ] Create a hardware client that runs the API
-- [ ] Design remote client that calls API. (A raspberry pi with buttons that connected to the API)
-    - [ ] 3D Print, and upload files to Github
+- [x] React frontend + Spring Boot API (v1.0)
+- [x] JWT authentication and user management
+- [x] ESP32 physical bell button with WebSocket integration (GamerBell + Esp32FitznetBell)
+- [x] OTA firmware updates for ESP32 devices via GitHub Releases
+- [x] Self-hosted on Proxmox + Docker behind Caddy reverse proxy
+- [ ] Raspberry Pi remote client with hardware buttons
+    - [ ] 3D print enclosure and upload files to GitHub
 
-See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full list of proposed features and known issues.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -171,16 +243,15 @@ See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full l
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make to the Fitz-Net are **greatly appreciated**.
-
-If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
-Don't forget to give the project a star! Thanks again!
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Fork the relevant repo
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit using conventional commits:
+   ```
+   feat(scope): what you added
+   fix(scope): what you fixed
+   chore(scope): maintenance change
+   ```
+4. Push and open a Pull Request against `main`
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -189,7 +260,7 @@ Don't forget to give the project a star! Thanks again!
 <!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE.txt` for more information.
+Distributed under the MIT License. See `LICENSE` for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -198,7 +269,7 @@ Distributed under the MIT License. See `LICENSE.txt` for more information.
 <!-- CONTACT -->
 ## Contact
 
-Your Name - [@mattylol85](https://twitter.com/mattylol85) - mattlol85@gmail.com
+Matt - [@mattylol85](https://twitter.com/mattylol85) - mattlol85@gmail.com
 
 Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol85/Fitz-Net)
 
@@ -206,19 +277,7 @@ Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol
 
 
 
-<!-- ACKNOWLEDGMENTS -->
-## Acknowledgments
-
-* [Me](https://github.com/mattlol85/Fitz-Net)
-* [Myself](https://github.com/mattlol85/Fitz-Net)
-* [I](https://github.com/mattlol85/Fitz-Net)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/mattlol85/Fitz-Net.svg?style=for-the-badge
 [contributors-url]: https://github.com/mattlol85/Fitz-Net/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/mattlol85/Fitz-Net.svg?style=for-the-badge
@@ -232,24 +291,25 @@ Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/mattfitzbk
 
-
 [product-screenshot]: images/screenshot.png
-
 
 [node]: https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white
 [node-url]: https://nodejs.org/
 
-[javascript]: https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black
-[javascript-url]: https://developer.mozilla.org/en-US/docs/Web/JavaScript
-
-[java]: https://img.shields.io/badge/Java-FFA500?style=for-the-badge&logo=opendjk&logoColor=white
+[java]: https://img.shields.io/badge/Java-FFA500?style=for-the-badge&logo=openjdk&logoColor=white
 [java-url]: https://www.java.com/
 
 [spring]: https://img.shields.io/badge/Spring-6DB33F?style=for-the-badge&logo=spring&logoColor=white
 [spring-url]: https://spring.io/
 
-[jenkins]: https://img.shields.io/badge/Jenkins-D24939?style=for-the-badge&logo=Jenkins&logoColor=white
-[jenkins-url]: https://jenkins.io/
-
 [react]: https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black
 [react-url]: https://reactjs.org/
+
+[MongoDB]: https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white
+[MongoDB-url]: https://www.mongodb.com/
+
+[Docker]: https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white
+[Docker-url]: https://www.docker.com/
+
+[Caddy]: https://img.shields.io/badge/Caddy-1F88C0?style=for-the-badge&logo=caddy&logoColor=white
+[Caddy-url]: https://caddyserver.com/
