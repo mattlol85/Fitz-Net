@@ -11,11 +11,11 @@ Internet
   │
   ├─ Port 25/465/587  →  mailserver container (Postfix SMTP)
   ├─ Port 993         →  mailserver container (Dovecot IMAPS)
-  └─ Port 443         →  Nginx reverse proxy
+  └─ Port 443         →  Caddy reverse proxy
                               └─ mail.fitznet.org  →  Roundcube (webmail)
 ```
 
-The mail ports (25, 465, 587, 993) bypass Nginx and forward directly to the `mailserver` container. The webmail UI at `mail.fitznet.org` routes through the existing Nginx reverse proxy like any other service.
+The mail ports (25, 465, 587, 993) bypass Caddy and forward directly to the `mailserver` container. The webmail UI at `mail.fitznet.org` routes through the existing Caddy reverse proxy like any other service.
 
 ---
 
@@ -53,7 +53,7 @@ services:
 
 ```bash
 certbot certonly --standalone -d mail.fitznet.org
-# Or if Nginx is already running on port 80:
+# Or if Caddy is already running on port 80:
 certbot certonly --webroot -w /var/www/html -d mail.fitznet.org
 ```
 
@@ -104,28 +104,20 @@ Forward from router's WAN interface to the Docker host's internal IP:
 | 465 | TCP | SMTPS |
 | 587 | TCP | SMTP submission |
 | 993 | TCP | IMAPS |
-| 80 | TCP | Nginx (already forwarded) |
-| 443 | TCP | Nginx (already forwarded) |
+| 80 | TCP | Caddy (already forwarded) |
+| 443 | TCP | Caddy (already forwarded) |
 
-### 7. Nginx for Roundcube Webmail
+### 7. Caddy for Roundcube Webmail
 
-Add to the existing Nginx config on the Docker host:
+Add to the existing `Caddyfile` on the Docker host:
 
-```nginx
-server {
-    listen 443 ssl;
-    server_name mail.fitznet.org;
-
-    ssl_certificate     /etc/letsencrypt/live/mail.fitznet.org/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/mail.fitznet.org/privkey.pem;
-
-    location / {
-        proxy_pass http://roundcube:80;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+```
+mail.fitznet.org {
+    reverse_proxy roundcube:80
 }
 ```
+
+Caddy handles TLS automatically via Let's Encrypt — no manual certificate step needed if you use Caddy for the webmail proxy.
 
 ---
 
