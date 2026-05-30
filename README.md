@@ -73,7 +73,7 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://fitznet.org)
 
-Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, and a self-hosted email server for `fitznet.org`.
+Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, a self-hosted email server for `fitznet.org`, and a full observability stack (Grafana, Loki, Prometheus, Promtail, cAdvisor).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -98,26 +98,47 @@ graph TD
 
         subgraph VM2["Ubuntu VM 2 · 192.168.1.59 — Docker"]
             Caddy["Caddy\nReverse Proxy"]
-            Website["fitz-net-website\nReact SPA"]
-            API["fitz-net-api\nSpring Boot REST"]
-            Bell["GamerBell\nWebSocket + OTA"]
-            Mail["mailserver\nSMTP + IMAP"]
-            Roundcube["Roundcube\nWebmail"]
-            Mongo["MongoDB"]
+
+            subgraph Core["fitznet-core"]
+                Website["fitz-net-website\nReact SPA"]
+                API["fitz-net-api\nSpring Boot REST"]
+                Bell["GamerBell\nWebSocket + OTA"]
+                Mongo["MongoDB"]
+            end
+
+            subgraph Mail["mail/"]
+                MailServer["mailserver\nSMTP + IMAP"]
+                Roundcube["Roundcube\nWebmail"]
+            end
+
+            subgraph Obs["observability/"]
+                Grafana["Grafana\n:3000"]
+                Prometheus["Prometheus\n:9090"]
+                Loki["Loki\n:3100"]
+                Promtail["Promtail"]
+                CAdvisor["cAdvisor\n:8081"]
+                NodeExp["node-exporter\n:9100"]
+            end
         end
     end
 
     ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
 
     Internet --> FitznetOrg --> DNS --> Router --> Caddy
-    Internet -->|"Port 25/587/993"| Mail
+    Internet -->|"Port 25/587/993"| MailServer
     Caddy --> Website
     Caddy --> API
     Caddy --> Bell
     Caddy --> Roundcube
     API --> Mongo
-    Mail --> Roundcube
+    MailServer --> Roundcube
     ESP32 -->|"wss"| Bell
+
+    Promtail -->|"logs"| Loki
+    CAdvisor -->|"metrics"| Prometheus
+    NodeExp -->|"metrics"| Prometheus
+    Loki --> Grafana
+    Prometheus --> Grafana
 ```
 
 ### Services
@@ -285,6 +306,7 @@ See [`docs/mail-server.md`](docs/mail-server.md) for the full step-by-step setup
 * [![MongoDB][MongoDB]][MongoDB-url]
 * [![Docker][Docker]][Docker-url]
 * [![Caddy][Caddy]][Caddy-url]
+* [![Grafana][Grafana]][Grafana-url]
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -331,6 +353,13 @@ docker exec -ti mailserver setup email add noreply@fitznet.org
 docker exec -ti mailserver setup config dkim
 ```
 
+**Observability stack** — run on the Docker host:
+```sh
+cd observability
+docker compose up -d
+# Grafana UI available at http://<host-ip>:3000  (default login: admin / admin)
+```
+
 See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
 See [`docs/mail-server.md`](docs/mail-server.md) for the complete mail server setup guide.
 
@@ -348,6 +377,7 @@ See [`docs/mail-server.md`](docs/mail-server.md) for the complete mail server se
 - [x] ESP32 physical bell button with WebSocket integration (GamerBell + Esp32FitznetBell)
 - [x] OTA firmware updates for ESP32 devices via GitHub Releases
 - [x] Self-hosted on Proxmox + Docker behind Caddy reverse proxy
+- [x] Observability stack — Grafana, Loki, Prometheus, Promtail, cAdvisor, node-exporter
 - [x] Self-hosted email at fitznet.org (docker-mailserver + Roundcube)
 - [x] Password reset via email
 - [ ] Raspberry Pi remote client with hardware buttons
@@ -432,3 +462,6 @@ Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol
 
 [Caddy]: https://img.shields.io/badge/Caddy-1F88C0?style=for-the-badge&logo=caddy&logoColor=white
 [Caddy-url]: https://caddyserver.com/
+
+[Grafana]: https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white
+[Grafana-url]: https://grafana.com/
