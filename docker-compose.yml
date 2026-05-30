@@ -1,0 +1,98 @@
+services:
+  gamerbell:
+    image: mattlol85/bell-api:latest
+    container_name: gamerbell
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_DATABASE: ${MONGO_DATABASE}
+    networks:
+      - fitznet
+      - internal
+    expose:
+      - "8080"
+    labels:
+      caddy: gamerbell.fitznet.doomdns.org
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy_network: fitznet
+    depends_on:
+      - mongo
+
+  fitz-net-api:
+    image: mattlol85/fitz-net-api:latest
+    container_name: fitz-net-api
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_DATABASE: ${MONGO_DATABASE}
+    networks:
+      - fitznet
+      - internal
+    expose:
+      - "8080"
+    labels:
+      caddy: api.fitznet.doomdns.org, api.fitznet.org
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy_network: fitznet
+    depends_on:
+      - mongo
+
+  fitz-net-website:
+    image: mattlol85/fitz-net-website:latest
+    container_name: fitz-net-website
+    restart: unless-stopped
+    networks:
+      - fitznet
+      - internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "80"
+    labels:
+      caddy: fitznet.org, fitznet.doomdns.org
+      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy_network: fitznet
+    depends_on:
+      - fitz-net-api
+
+  mongo:
+    image: mongo:4.4
+    container_name: fitz-net-api-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - internal
+    ports:
+      - "27017:27017"
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - caddy_data:/data
+    networks:
+      - fitznet
+
+volumes:
+  mongo_data:
+  caddy_data:
+
+networks:
+  fitznet:
+    external: true
+  internal:
+    driver: bridge
