@@ -1,8 +1,13 @@
 # Prerequisites (run once on the host before first deploy):
-#   1. Ensure the external network exists:  docker network create fitznet
-#   2. Start the main fitznet stack first so Caddy can provision the
+#   1. Ensure the fitznet network exists (created by main stack):
+#        docker network ls | grep fitznet
+#        docker network create fitznet   # only if missing
+#   2. Ensure the fitznet_caddy_data volume exists (created by main stack):
+#        docker volume ls | grep caddy
+#   3. Start the main fitznet stack first so Caddy provisions the
 #      mail.fitznet.org TLS cert before mailserver reads it.
-#   3. After first start, run: docker restart mailserver
+#   4. After first start, restart mailserver once the cert exists (~30s):
+#        docker restart mailserver
 #
 # Deploy:
 #   docker compose up -d
@@ -62,6 +67,7 @@ volumes:
   roundcube-data:
   caddy_data:
     external: true
+    name: fitznet_caddy_data   # created by the main fitznet/ stack (project name prefix)
 
 networks:
   fitznet:
