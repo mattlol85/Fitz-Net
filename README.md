@@ -1,15 +1,6 @@
 <!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a name="readme-top"></a>
 
-
-<!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -29,12 +20,9 @@
 <h3 align="center">Fitz-Net</h3>
 
   <p align="center">
-    A collection of software to host @Mattlol85's ideas
+    A self-hosted platform for Matt's ideas — website, API, IoT devices, and email, all running on Proxmox.
     <br />
-    <a href="https://github.com/mattlol85/Fitz-Net"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/mattlol85/Fitz-Net">View Demo</a>
+    <a href="https://fitznet.org">Live Site</a>
     ·
     <a href="https://github.com/mattlol85/Fitz-Net/issues">Report Bug</a>
     ·
@@ -48,25 +36,21 @@
 <details>
   <summary>Table of Contents</summary>
   <ol>
+    <li><a href="#about-the-project">About The Project</a></li>
+    <li><a href="#architecture">Architecture</a></li>
     <li>
-      <a href="#about-the-project">About The Project</a>
+      <a href="#services">Services</a>
       <ul>
-        <li><a href="#built-with">Built With</a></li>
+        <li><a href="#fitz-net-website">fitz-net-website</a></li>
+        <li><a href="#fitz-net-api">fitz-net-api</a></li>
+        <li><a href="#gamerbell">GamerBell</a></li>
+        <li><a href="#mail-server">Mail Server</a></li>
       </ul>
     </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
+    <li><a href="#getting-started">Getting Started</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
 </details>
 
@@ -77,128 +61,196 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://fitznet.org)
 
-The Fitz-Net is a long standing idea of what I, [@mattlol85](https://github.com/mattlol85)  have always wanted and dreamed of. At the bare minimum, the Fitz-Net is a website that I can develop new ideas on, and have a physical place on the internet to access it from. Currently, there are two main components to the Fitz-Net, a React-based website, and a Spring API to go alongside it.
+Fitz-Net is a self-hosted, containerized platform running on a Proxmox home server. It started as a personal website and has grown into a full ecosystem of services — a React frontend, a Spring Boot API, an IoT WebSocket relay for physical button devices, and a self-hosted email server.
+
+Everything runs in Docker Compose on Proxmox. Services are deployed via GitHub Actions to Docker Hub, then pulled on the server.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-### Built With
+## Architecture
 
-* [![node][node]][node-url]
-* [![React][React]][React-url]
-* [![Spring][Spring]][Spring-url]
-* [![Java][Java]][java-url]
-* [![Jenkins][Jenkins]][Jenkins-url]
+```
+Proxmox Home Server
+├── Docker Host
+│   ├── fitz-net-website    → https://fitznet.org          (React + Nginx)
+│   ├── fitz-net-api        → https://api.fitznet.org      (Spring Boot + MongoDB)
+│   ├── GamerBell           → https://gamerbell.fitznet.org (Spring Boot WebSocket)
+│   └── mail/
+│       ├── mailserver      → mail.fitznet.org:25/587/993  (docker-mailserver)
+│       └── roundcube       → https://mail.fitznet.org     (Webmail)
+└── MongoDB                 → internal only
+```
 
+DNS is managed via the registrar. Dynamic DNS (doomdns.org) provides fallback hostnames for services while static `fitznet.org` records serve the primary domains.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-<!-- GETTING STARTED -->
+## Services
+
+### fitz-net-website
+
+**Repo:** [mattlol85/fitz-net-website](https://github.com/mattlol85/fitz-net-website)
+**Live:** https://fitznet.org
+
+React 19 frontend served via Nginx in Docker. Features:
+- Homepage with animated Fitz-Net branding
+- Overwatch 2 tracker — competitive leaderboard, history charts, player avatars
+- LiveBoard — real-time collaborative canvas via STOMP WebSocket
+- GamerBell widget — live status of physical ESP32 button devices
+- Status Dashboard — monitors all service health via Spring Actuator
+- User auth (JWT), profile editing, **forgot-password / reset-password flow**
+
+**Stack:** React 19 · Vite 6 · React Router 7 · Vanilla CSS Modules · Docker (Nginx)
+
+---
+
+### fitz-net-api
+
+**Repo:** [mattlol85/fitz-net-api](https://github.com/mattlol85/fitz-net-api)
+**Live:** https://api.fitznet.org
+
+Spring Boot 3.4 REST API and WebSocket backend. Features:
+- User management (register, login, JWT auth, profile update)
+- Overwatch 2 integration via OverFast API (player stats, ratings, history snapshots)
+- LiveBoard STOMP WebSocket for shared canvas state
+- AES encryption endpoints
+- **Password reset via email** — generates secure tokens, sends reset links via `noreply@fitznet.org`
+
+**Stack:** Java 21 · Spring Boot 3.4 · MongoDB · Spring Security (JWT/BCrypt) · Spring Mail · Gradle · Docker
+
+**Key environment variables:**
+
+| Variable | Purpose |
+|---|---|
+| `JWT_SECRET` | HS256 signing key |
+| `MONGO_HOST` / `MONGO_PORT` | MongoDB connection |
+| `MAIL_HOST` | SMTP host (`mail.fitznet.org`) |
+| `MAIL_USERNAME` | SMTP user (`noreply@fitznet.org`) |
+| `MAIL_PASSWORD` | SMTP password |
+| `APP_BASE_URL` | Base URL for reset links (`https://fitznet.org`) |
+
+---
+
+### GamerBell
+
+**Repo:** [mattlol85/GamerBell](https://github.com/mattlol85/GamerBell)
+**Live:** https://gamerbell.fitznet.org
+
+Spring Boot WebSocket relay service bridging physical ESP32 button devices with the Fitz-Net web UI. Also handles over-the-air (OTA) firmware updates for ESP32s via the GitHub Releases API.
+
+**Stack:** Java 21 · Spring Boot 3.4 · Spring WebSocket · Docker
+
+---
+
+### Mail Server
+
+**Config:** [`Fitz-Net-Agent-Sandbox/mail/`](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox)
+**Live:** https://mail.fitznet.org (webmail) · `mail.fitznet.org:993` (IMAP) · `mail.fitznet.org:587` (SMTP)
+
+Self-hosted email for `fitznet.org` running via Docker Compose alongside the other services.
+
+| Container | Image | Role |
+|---|---|---|
+| `mailserver` | `ghcr.io/docker-mailserver/docker-mailserver` | SMTP (Postfix) + IMAP (Dovecot) + rspamd spam filter + DKIM |
+| `roundcube` | `roundcube/roundcubemail` | Browser-based webmail, proxied through Nginx |
+
+**DNS records required:**
+
+| Type | Name | Value |
+|---|---|---|
+| A | `mail` | `<public IP>` |
+| MX | `@` | `mail.fitznet.org` (priority 10) |
+| TXT | `@` | `v=spf1 mx ~all` |
+| TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:admin@fitznet.org` |
+| TXT | `dkim._domainkey` | *(generated by docker-mailserver)* |
+
+See [`mail/SETUP.md`](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox/blob/main/mail/SETUP.md) for the full step-by-step setup guide.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
 ## Getting Started
-
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
 
 ### Prerequisites
 
-This is an example of how to list things you need to use the software and how to install them. Keep in mind that parts of the project are intened to run on specific hardware.
+- Docker + Docker Compose
+- Java 21 (for local development)
+- Node 20+ / npm (for frontend development)
 
-### Unix:
+### Clone with Submodules
 
-* Update packages & Install JDK 17
-  ```sh
-  sudo apt update
-  sudo apt install openjdk-17-jdk gradle git -y 
-* Install Node Package Manager (npm)
-  ```sh
-  sudo apt install npm
-  npm install npm@latest -g
-  ```
-### Windows:
-*Info: Highly reccomend you use a WSL distro to work on this project.*
-### Installation
+```sh
+git clone https://github.com/mattlol85/Fitz-Net.git
+cd Fitz-Net
+git submodule init
+git submodule update
+```
 
-1. Clone the repo and initialize and update submodules.
-   ```sh
-   git clone https://github.com/mattlol85/Fitz-Net.git
-   cd Fitz-Net
-   git submodule init
-   git submodule update
-   ```
-2. Open Website Repo
-   ```sh
-   cd fitz-net-website
-   ```
-3. and or Fitz-Net API Repo
-   ```sh
-   cd fitz-net-api
-   ```
-   *Warning: If the directories are empty make sure you run the submodule init and update commands!*
+### Run API locally
 
+```sh
+cd fitz-net-api
+./gradlew bootRun
+```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### Run Website locally
 
+```sh
+cd fitz-net-website
+npm install
+npm run dev
+```
 
+### Start mail stack (on Proxmox Docker host)
 
-<!-- USAGE EXAMPLES -->
-## Usage
-
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
-
-_For more examples, please refer to the [Documentation](https://example.com)_
+```sh
+cd mail
+docker compose up -d
+# First time: create accounts and DKIM
+docker exec -ti mailserver setup email add matt@fitznet.org
+docker exec -ti mailserver setup email add noreply@fitznet.org
+docker exec -ti mailserver setup config dkim
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-<!-- ROADMAP -->
 ## Roadmap
 
-- [ ] Complete a 1.0 release of Fitz-Net and its modules
-- [ ] Create a hardware client that runs the API
-- [ ] Design remote client that calls API. (A raspberry pi with buttons that connected to the API)
-    - [ ] 3D Print, and upload files to Github
+- [x] React website at fitznet.org
+- [x] Spring Boot REST API
+- [x] MongoDB user storage with JWT auth
+- [x] Overwatch 2 stats tracker
+- [x] GamerBell — IoT WebSocket relay + OTA firmware updates
+- [x] LiveBoard — real-time collaborative canvas
+- [x] Self-hosted email at fitznet.org
+- [x] Password reset via email
+- [ ] Complete a 1.0 release
+- [ ] Hardware client (ESP32 / Raspberry Pi) running additional integrations
 
-See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full list of proposed features (and known issues).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- CONTRIBUTING -->
-## Contributing
-
-Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make to the Fitz-Net are **greatly appreciated**.
-
-If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
-Don't forget to give the project a star! Thanks again!
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for proposed features and known issues.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-<!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE.txt` for more information.
+Distributed under the MIT License. See `LICENSE` for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-<!-- CONTACT -->
 ## Contact
 
-Your Name - [@mattylol85](https://twitter.com/mattylol85) - mattlol85@gmail.com
+Matt - [@mattylol85](https://twitter.com/mattylol85) - mattlol85@gmail.com
 
 Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol85/Fitz-Net)
 
@@ -206,19 +258,7 @@ Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol
 
 
 
-<!-- ACKNOWLEDGMENTS -->
-## Acknowledgments
-
-* [Me](https://github.com/mattlol85/Fitz-Net)
-* [Myself](https://github.com/mattlol85/Fitz-Net)
-* [I](https://github.com/mattlol85/Fitz-Net)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/mattlol85/Fitz-Net.svg?style=for-the-badge
 [contributors-url]: https://github.com/mattlol85/Fitz-Net/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/mattlol85/Fitz-Net.svg?style=for-the-badge
@@ -232,24 +272,17 @@ Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/mattfitzbk
 
-
 [product-screenshot]: images/screenshot.png
-
 
 [node]: https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white
 [node-url]: https://nodejs.org/
-
-[javascript]: https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black
-[javascript-url]: https://developer.mozilla.org/en-US/docs/Web/JavaScript
-
-[java]: https://img.shields.io/badge/Java-FFA500?style=for-the-badge&logo=opendjk&logoColor=white
+[React]: https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black
+[React-url]: https://reactjs.org/
+[Spring]: https://img.shields.io/badge/Spring-6DB33F?style=for-the-badge&logo=spring&logoColor=white
+[Spring-url]: https://spring.io/
+[Java]: https://img.shields.io/badge/Java-FFA500?style=for-the-badge&logo=openjdk&logoColor=white
 [java-url]: https://www.java.com/
-
-[spring]: https://img.shields.io/badge/Spring-6DB33F?style=for-the-badge&logo=spring&logoColor=white
-[spring-url]: https://spring.io/
-
-[jenkins]: https://img.shields.io/badge/Jenkins-D24939?style=for-the-badge&logo=Jenkins&logoColor=white
-[jenkins-url]: https://jenkins.io/
-
-[react]: https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black
-[react-url]: https://reactjs.org/
+[MongoDB]: https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white
+[MongoDB-url]: https://www.mongodb.com/
+[Docker]: https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white
+[Docker-url]: https://www.docker.com/
