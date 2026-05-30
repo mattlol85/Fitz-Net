@@ -124,8 +124,9 @@ graph TD
 
     ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
 
-    Internet --> FitznetOrg --> DNS --> Router --> Caddy
-    Internet -->|"Port 25/587/993"| MailServer
+    Internet --> FitznetOrg --> DNS --> Router
+    Router -->|"80/443"| Caddy
+    Router -->|"25/587/993"| MailServer
     Caddy --> Website
     Caddy --> API
     Caddy --> Bell
