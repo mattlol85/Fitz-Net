@@ -1,0 +1,81 @@
+services:
+  loki:
+    image: grafana/loki:3.6.0
+    container_name: loki
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - loki
+      - prometheus
+
+  promtail:
+    image: grafana/promtail:3.6.0
+    container_name: promtail
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    depends_on:
+      - loki
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    depends_on:
+      - cadvisor
+      - node-exporter
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    pid: host
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    restart: unless-stopped
+
+volumes:
+  loki-data:
+  grafana-data:
+  prometheus-data:
