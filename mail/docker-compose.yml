@@ -33,12 +33,21 @@ services:
       - ENABLE_CLAMAV=0
       - ENABLE_FAIL2BAN=1
       - SSL_TYPE=manual
-      - SSL_CERT_PATH=/caddy-certs/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.crt
-      - SSL_KEY_PATH=/caddy-certs/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.key
+      - SSL_CERT_PATH=/caddy-certs/caddy/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.crt
+      - SSL_KEY_PATH=/caddy-certs/caddy/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.key
+      # Outbound relay via Resend (residential IP blocked from direct-to-MX)
+      - RELAY_HOST=smtp.resend.com
+      - RELAY_PORT=587
+      - RELAY_USER=resend
+      - RELAY_PASSWORD=${RESEND_API_KEY}
     cap_add:
       - NET_ADMIN
       - SYS_PTRACE
     restart: unless-stopped
+    networks:
+      fitznet:
+        aliases:
+          - mail.fitznet.org
 
   roundcube:
     image: roundcube/roundcubemail:latest

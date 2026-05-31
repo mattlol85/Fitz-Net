@@ -1,0 +1,4 @@
+.env
+dms/mail-data/
+dms/mail-state/
+dms/mail-logs/
