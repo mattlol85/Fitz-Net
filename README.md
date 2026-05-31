@@ -1,7 +1,6 @@
 <!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a name="readme-top"></a>
 
-
 <!-- PROJECT SHIELDS -->
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
@@ -49,6 +48,15 @@
       </ul>
     </li>
     <li><a href="#repositories">Repositories</a></li>
+    <li>
+      <a href="#service-details">Service Details</a>
+      <ul>
+        <li><a href="#fitz-net-website">fitz-net-website</a></li>
+        <li><a href="#fitz-net-api">fitz-net-api</a></li>
+        <li><a href="#gamerbell">GamerBell</a></li>
+        <li><a href="#mail-server">Mail Server</a></li>
+      </ul>
+    </li>
     <li><a href="#built-with">Built With</a></li>
     <li><a href="#getting-started">Getting Started</a></li>
     <li><a href="#roadmap">Roadmap</a></li>
@@ -65,7 +73,7 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://fitznet.org)
 
-Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, and a full observability stack (Grafana, Loki, Prometheus, Promtail, cAdvisor).
+Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, a self-hosted email server for `fitznet.org`, and a full observability stack (Grafana, Loki, Prometheus, Promtail, cAdvisor).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -90,10 +98,18 @@ graph TD
 
         subgraph VM2["Ubuntu VM 2 · 192.168.1.59 — Docker"]
             Caddy["Caddy\nReverse Proxy"]
-            Website["fitz-net-website\nReact SPA"]
-            API["fitz-net-api\nSpring Boot REST"]
-            Bell["GamerBell\nWebSocket + OTA"]
-            Mongo["MongoDB"]
+
+            subgraph Core["fitznet-core"]
+                Website["fitz-net-website\nReact SPA"]
+                API["fitz-net-api\nSpring Boot REST"]
+                Bell["GamerBell\nWebSocket + OTA"]
+                Mongo["MongoDB"]
+            end
+
+            subgraph Mail["mail/"]
+                MailServer["mailserver\nSMTP + IMAP"]
+                Roundcube["Roundcube\nWebmail"]
+            end
 
             subgraph Obs["observability/"]
                 Grafana["Grafana\n:3000"]
@@ -108,11 +124,15 @@ graph TD
 
     ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
 
-    Internet --> FitznetOrg --> DNS --> Router --> Caddy
+    Internet --> FitznetOrg --> DNS --> Router
+    Router -->|"80/443"| Caddy
+    Router -->|"25/587/993"| MailServer
     Caddy --> Website
     Caddy --> API
     Caddy --> Bell
+    Caddy --> Roundcube
     API --> Mongo
+    MailServer --> Roundcube
     ESP32 -->|"wss"| Bell
 
     Promtail -->|"logs"| Loki
@@ -124,7 +144,7 @@ graph TD
 
 ### Services
 
-The four services and how they interact at the application layer:
+The services and how they interact at the application layer:
 
 ```mermaid
 graph LR
@@ -143,6 +163,7 @@ graph LR
         Controllers["Controllers"]
         Services["Services"]
         Repos["Repositories"]
+        MailSvc["EmailService\nSpring Mail"]
     end
 
     subgraph Bell["GamerBell · Spring Boot 3.4"]
@@ -153,11 +174,13 @@ graph LR
 
     Mongo[("MongoDB")]
     GitHub(["GitHub Releases\nOTA Firmware"])
+    MailServer(["mail.fitznet.org\ndocker-mailserver"])
 
     Browser --> React
     React --> AuthCtx --> ApiSvc
     ApiSvc -->|"REST / HTTPS"| SecFilter
     SecFilter --> Controllers --> Services --> Repos --> Mongo
+    Services --> MailSvc -->|"SMTP"| MailServer
 
     React --> WSClient
     WSClient -->|"wss"| WSHandler
@@ -177,11 +200,98 @@ graph LR
 
 | Repo | Description |
 |---|---|
-| [Fitz-Net](https://github.com/mattlol85/Fitz-Net) | This repo — orchestration hub, GitHub Actions, shared agent docs |
-| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | Spring Boot 3.4 REST API — user management, auth, encryption |
-| [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React 19 SPA — dashboard, live board, game stats, auth |
+| [Fitz-Net](https://github.com/mattlol85/Fitz-Net) | This repo — orchestration hub, architecture docs |
+| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | Spring Boot 3.4 REST API — user management, auth, encryption, email |
+| [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React 19 SPA — dashboard, live board, game stats, auth, password reset |
 | [GamerBell](https://github.com/mattlol85/GamerBell) | Spring Boot WebSocket relay + OTA firmware server for ESP32 bells |
 | [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | C++ / PlatformIO firmware for the physical ESP32 bell button |
+| [Fitz-Net-Agent-Sandbox](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox) | AI agent workspace + mail server Docker Compose config |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
+<!-- SERVICE DETAILS -->
+## Service Details
+
+### fitz-net-website
+
+**Repo:** [mattlol85/fitz-net-website](https://github.com/mattlol85/fitz-net-website)  
+**Live:** https://fitznet.org
+
+React 19 frontend served via Caddy. Features:
+- Homepage with animated Fitz-Net branding
+- Overwatch 2 tracker — competitive leaderboard, history charts, player avatars
+- LiveBoard — real-time collaborative canvas via STOMP WebSocket
+- GamerBell widget — live status of physical ESP32 button devices
+- Status Dashboard — monitors all service health via Spring Actuator
+- User auth (JWT), profile editing, **forgot-password / reset-password flow**
+
+**Stack:** React 19 · Vite 6 · React Router 7 · Vanilla CSS Modules · Docker
+
+---
+
+### fitz-net-api
+
+**Repo:** [mattlol85/fitz-net-api](https://github.com/mattlol85/fitz-net-api)  
+**Live:** https://api.fitznet.org
+
+Spring Boot 3.4 REST API and WebSocket backend. Features:
+- User management (register, login, JWT auth, profile update)
+- Overwatch 2 integration via OverFast API (player stats, ratings, history snapshots)
+- LiveBoard STOMP WebSocket for shared canvas state
+- AES encryption endpoints
+- **Password reset via email** — generates secure tokens, sends reset links via `noreply@fitznet.org`
+
+**Stack:** Java 21 · Spring Boot 3.4 · MongoDB · Spring Security (JWT/BCrypt) · Spring Mail · Gradle · Docker
+
+**Key environment variables:**
+
+| Variable | Purpose |
+|---|---|
+| `JWT_SECRET` | HS256 signing key |
+| `MONGO_HOST` / `MONGO_PORT` | MongoDB connection |
+| `MAIL_HOST` | SMTP host (`mail.fitznet.org`) |
+| `MAIL_USERNAME` | SMTP user (`noreply@fitznet.org`) |
+| `MAIL_PASSWORD` | SMTP password |
+| `APP_BASE_URL` | Base URL for reset links (`https://fitznet.org`) |
+
+---
+
+### GamerBell
+
+**Repo:** [mattlol85/GamerBell](https://github.com/mattlol85/GamerBell)  
+**Live:** https://gamerbell.fitznet.org
+
+Spring Boot WebSocket relay service bridging physical ESP32 button devices with the Fitz-Net web UI. Also handles over-the-air (OTA) firmware updates for ESP32s via the GitHub Releases API.
+
+**Stack:** Java 21 · Spring Boot 3.4 · Spring WebSocket · Docker
+
+---
+
+### Mail Server
+
+**Config:** [`Fitz-Net-Agent-Sandbox/mail/`](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox)  
+**Live:** https://mail.fitznet.org (webmail) · `mail.fitznet.org:993` (IMAP) · `mail.fitznet.org:587` (SMTP)
+
+Self-hosted email for `fitznet.org` running via Docker Compose alongside the other services.
+
+| Container | Image | Role |
+|---|---|---|
+| `mailserver` | `ghcr.io/docker-mailserver/docker-mailserver` | SMTP (Postfix) + IMAP (Dovecot) + rspamd spam filter + DKIM |
+| `roundcube` | `roundcube/roundcubemail` | Browser-based webmail, proxied through Caddy |
+
+**DNS records required:**
+
+| Type | Name | Value |
+|---|---|---|
+| A | `mail` | `<public IP>` |
+| MX | `@` | `mail.fitznet.org` (priority 10) |
+| TXT | `@` | `v=spf1 mx ~all` |
+| TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:admin@fitznet.org` |
+| TXT | `dkim._domainkey` | *(generated by docker-mailserver)* |
+
+See [`docs/mail-server.md`](docs/mail-server.md) for the full step-by-step setup guide.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -234,6 +344,16 @@ cd GamerBell
 ./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
+**Mail stack** — run on the Proxmox Docker host:
+```sh
+cd Fitz-Net-Agent-Sandbox/mail
+docker compose up -d
+# First time: create mailboxes and generate DKIM
+docker exec -ti mailserver setup email add matt@fitznet.org
+docker exec -ti mailserver setup email add noreply@fitznet.org
+docker exec -ti mailserver setup config dkim
+```
+
 **Observability stack** — run on the Docker host:
 ```sh
 cd observability
@@ -241,7 +361,8 @@ docker compose up -d
 # Grafana UI available at http://<host-ip>:3000  (default login: admin / admin)
 ```
 
-See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.
+See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
+See [`docs/mail-server.md`](docs/mail-server.md) for the complete mail server setup guide.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -250,14 +371,19 @@ See each repo's `.github/agents.md` for full conventions, build commands, and ar
 <!-- ROADMAP -->
 ## Roadmap
 
-- [x] React frontend + Spring Boot API (v1.0)
+- [x] React frontend + Spring Boot API
 - [x] JWT authentication and user management
+- [x] Overwatch 2 stats tracker and leaderboard
+- [x] LiveBoard — real-time collaborative canvas
 - [x] ESP32 physical bell button with WebSocket integration (GamerBell + Esp32FitznetBell)
 - [x] OTA firmware updates for ESP32 devices via GitHub Releases
 - [x] Self-hosted on Proxmox + Docker behind Caddy reverse proxy
 - [x] Observability stack — Grafana, Loki, Prometheus, Promtail, cAdvisor, node-exporter
+- [x] Self-hosted email at fitznet.org (docker-mailserver + Roundcube)
+- [x] Password reset via email
 - [ ] Raspberry Pi remote client with hardware buttons
     - [ ] 3D print enclosure and upload files to GitHub
+- [ ] Complete a 1.0 release
 
 See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full list of proposed features and known issues.
 
@@ -291,7 +417,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 
 
-<!-- CONTACT -->
 ## Contact
 
 Matt - [@mattylol85](https://twitter.com/mattylol85) - mattlol85@gmail.com
@@ -327,8 +452,8 @@ Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol
 [spring]: https://img.shields.io/badge/Spring-6DB33F?style=for-the-badge&logo=spring&logoColor=white
 [spring-url]: https://spring.io/
 
-[react]: https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black
-[react-url]: https://reactjs.org/
+[React]: https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black
+[React-url]: https://reactjs.org/
 
 [MongoDB]: https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white
 [MongoDB-url]: https://www.mongodb.com/

@@ -1,0 +1,83 @@
+# Prerequisites (run once on the host before first deploy):
+#   1. Ensure the fitznet network exists (created by main stack):
+#        docker network ls | grep fitznet
+#        docker network create fitznet   # only if missing
+#   2. Ensure the fitznet_caddy_data volume exists (created by main stack):
+#        docker volume ls | grep caddy
+#   3. Start the main fitznet stack first so Caddy provisions the
+#      mail.fitznet.org TLS cert before mailserver reads it.
+#   4. After first start, restart mailserver once the cert exists (~30s):
+#        docker restart mailserver
+#
+# Deploy:
+#   docker compose up -d
+
+services:
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail.fitznet.org
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - ./dms/mail-data/:/var/mail/
+      - ./dms/mail-state/:/var/mail-state/
+      - ./dms/mail-logs/:/var/log/mail/
+      - ./dms/config/:/tmp/docker-mailserver/
+      - caddy_data:/caddy-certs:ro
+    environment:
+      - ENABLE_RSPAMD=1
+      - ENABLE_CLAMAV=0
+      - ENABLE_FAIL2BAN=1
+      - SSL_TYPE=manual
+      - SSL_CERT_PATH=/caddy-certs/caddy/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.crt
+      - SSL_KEY_PATH=/caddy-certs/caddy/certificates/acme-v02.api.letsencrypt.org-directory/mail.fitznet.org/mail.fitznet.org.key
+      # Outbound relay via Resend (residential IP blocked from direct-to-MX)
+      - RELAY_HOST=smtp.resend.com
+      - RELAY_PORT=587
+      - RELAY_USER=resend
+      - RELAY_PASSWORD=${RESEND_API_KEY}
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    restart: unless-stopped
+    networks:
+      fitznet:
+        aliases:
+          - mail.fitznet.org
+
+  roundcube:
+    image: roundcube/roundcubemail:latest
+    container_name: roundcube
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mail.fitznet.org
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mail.fitznet.org
+      - ROUNDCUBEMAIL_SMTP_PORT=587
+      - ROUNDCUBEMAIL_DB_TYPE=sqlite
+    volumes:
+      - roundcube-data:/var/roundcube/db
+    expose:
+      - "80"
+    labels:
+      caddy: mail.fitznet.org
+      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy_network: fitznet
+    networks:
+      - fitznet
+    restart: unless-stopped
+    depends_on:
+      - mailserver
+
+volumes:
+  roundcube-data:
+  caddy_data:
+    external: true
+    name: fitznet_caddy_data   # created by the main fitznet/ stack (project name prefix)
+
+networks:
+  fitznet:
+    external: true
