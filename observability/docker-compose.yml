@@ -13,10 +13,17 @@ services:
   grafana:
     image: grafana/grafana:10.4.2
     container_name: grafana
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
       - grafana-data:/var/lib/grafana
+    labels:
+      caddy: logs.fitznet.org
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      caddy_network: fitznet
+    networks:
+      - default
+      - fitznet
     restart: unless-stopped
     depends_on:
       - loki
@@ -79,3 +86,7 @@ volumes:
   loki-data:
   grafana-data:
   prometheus-data:
+
+networks:
+  fitznet:
+    external: true

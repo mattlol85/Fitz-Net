@@ -112,7 +112,7 @@ graph TD
             end
 
             subgraph Obs["observability/"]
-                Grafana["Grafana\n:3000"]
+                Grafana["Grafana\nlogs.fitznet.org"]
                 Prometheus["Prometheus\n:9090"]
                 Loki["Loki\n:3100"]
                 Promtail["Promtail"]
@@ -131,6 +131,7 @@ graph TD
     Caddy --> API
     Caddy --> Bell
     Caddy --> Roundcube
+    Caddy --> Grafana
     API --> Mongo
     MailServer --> Roundcube
     ESP32 -->|"wss"| Bell
@@ -358,7 +359,7 @@ docker exec -ti mailserver setup config dkim
 ```sh
 cd observability
 docker compose up -d
-# Grafana UI available at http://<host-ip>:3000  (default login: admin / admin)
+# Grafana UI available at https://logs.fitznet.org (default login: admin / admin)
 ```
 
 See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
