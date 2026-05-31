@@ -1,6 +1,6 @@
 # Grafana Dashboard Operations
 
-Grafana in this repo is fully file-provisioned. Treat dashboard JSON and provisioning YAML as the source of truth; do not rely on UI-only edits.
+Grafana datasource wiring stays in repo, but the service dashboards are now deployed through the Grafana HTTP API instead of being mounted as rigid JSON files.
 
 ---
 
@@ -10,28 +10,39 @@ Grafana in this repo is fully file-provisioned. Treat dashboard JSON and provisi
 |---|---|
 | Grafana container wiring | `observability\docker-compose.yml` |
 | Datasource provisioning | `observability\grafana\provisioning\datasources\datasources.yml` |
-| Dashboard provisioning | `observability\grafana\provisioning\dashboards\dashboards.yml` |
-| Website dashboard | `observability\grafana\dashboards\fitz-net-website\overview.json` |
-| API dashboard | `observability\grafana\dashboards\fitz-net-api\overview.json` |
-| GamerBell dashboard | `observability\grafana\dashboards\gamerbell\overview.json` |
+| Dashboard deployment script | `observability\grafana\scripts\Publish-GrafanaDashboards.ps1` |
 
 `observability\docker-compose.yml` mounts:
 
 - `observability\grafana\provisioning` → `/etc/grafana/provisioning`
-- `observability\grafana\dashboards` → `/var/lib/grafana/dashboards`
-
-The dashboard provider scans `/var/lib/grafana/dashboards` every 30 seconds and uses `foldersFromFilesStructure: true`, so the subfolders become Grafana folders automatically.
 
 ---
 
-## How provisioning works
+## How deployment works
 
 - `datasources.yml` provisions the Prometheus and Loki datasources as non-editable.
-- `dashboards.yml` provisions every JSON file under `observability\grafana\dashboards`.
-- `allowUiUpdates: false` means dashboard changes must be made in JSON, committed here, and deployed to the Docker host.
-- `disableDeletion: false` means deleting a JSON file removes the provisioned dashboard from Grafana.
+- `Publish-GrafanaDashboards.ps1` builds the three service dashboards in PowerShell and upserts them through `POST /api/dashboards/db`.
+- The script resolves the Prometheus and Loki datasource UIDs from the live Grafana instance before publishing dashboards.
+- Dashboards are created in the hosted Grafana folder `Fitz-Net Services`.
 
-Operationally: edit the JSON file in this repo, sync the change to the Docker host, and let Grafana reload it. A Grafana restart is usually unnecessary if the mounted file changed in place.
+Operationally: update the script, then rerun it against the target Grafana instance. The script is the source of truth for the dashboard layout, not ad-hoc UI changes.
+
+### Running the deployment
+
+PowerShell:
+
+```powershell
+$env:FITZNET_GRAFANA_USERNAME = "admin"
+$env:FITZNET_GRAFANA_PASSWORD = "<password>"
+.\observability\grafana\scripts\Publish-GrafanaDashboards.ps1 -GrafanaUrl "https://logs.fitznet.org"
+```
+
+Equivalent `curl` check against the same Grafana API:
+
+```bash
+curl -u "$GRAFANA_USER:$GRAFANA_PASS" \
+  https://logs.fitznet.org/api/search?query=fitz-net
+```
 
 ---
 
@@ -101,15 +112,16 @@ Implications:
 
 - API and GamerBell metrics depend on Spring Actuator + Micrometer Prometheus output staying enabled at `/actuator/prometheus`.
 - Loki log panels depend on the Docker Compose service label because Promtail maps `com.docker.compose.service` to the `service` label. Renaming compose services requires dashboard query updates.
+- The dashboard deployment script assumes Grafana already has working Prometheus and Loki datasources. If those datasource names or types change, the script must be updated before rerunning it.
 
 ---
 
 ## Maintenance checklist
 
-1. Edit the provisioned JSON file under `observability\grafana\dashboards\...`.
-2. Keep the dashboard in the correct service subfolder so Grafana folder placement stays consistent.
+1. Edit `observability\grafana\scripts\Publish-GrafanaDashboards.ps1`.
+2. Rerun the script against the intended Grafana instance.
 3. If a panel stops working, verify the backing signal first:
    - Prometheus scrape target for API/GamerBell
    - cAdvisor metric presence for container panels
    - Loki log ingestion and JSON parsing for website/log panels
-4. Commit the JSON/YAML change in this repo so Grafana can be rebuilt or re-synced reproducibly.
+4. Commit the script or datasource change in this repo so the deployed dashboards stay reproducible.

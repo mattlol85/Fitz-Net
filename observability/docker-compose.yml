@@ -18,7 +18,6 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     labels:
       caddy: logs.fitznet.org
       caddy.reverse_proxy: "{{upstreams 3000}}"

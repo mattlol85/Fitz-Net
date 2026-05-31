@@ -359,11 +359,11 @@ docker exec -ti mailserver setup config dkim
 ```sh
 cd observability
 docker compose up -d
-# Grafana UI available at https://logs.fitznet.org (default login: admin / admin)
+# Grafana UI available at https://logs.fitznet.org
 ```
 
 See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.
-See [`docs/observability.md`](docs/observability.md) for Grafana dashboard provisioning, dashboard locations, and signal caveats.
+See [`docs/observability.md`](docs/observability.md) for Grafana datasource provisioning, API-driven dashboard deployment, and signal caveats.
 See [`docs/mail-server.md`](docs/mail-server.md) for the complete mail server setup guide.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
