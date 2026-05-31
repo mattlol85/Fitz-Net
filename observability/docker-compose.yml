@@ -8,15 +8,24 @@ services:
       - loki-data:/loki
     ports:
       - "3100:3100"
+    networks:
+      - observability
     restart: unless-stopped
 
   grafana:
     image: grafana/grafana:10.4.2
     container_name: grafana
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
       - grafana-data:/var/lib/grafana
+    networks:
+      - observability
+      - fitznet
+    labels:
+      caddy: logs.fitznet.org
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      caddy_network: fitznet
     restart: unless-stopped
     depends_on:
       - loki
@@ -30,6 +39,8 @@ services:
       - ./promtail/config.yml:/etc/promtail/config.yml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - observability
     restart: unless-stopped
     depends_on:
       - loki
@@ -46,6 +57,8 @@ services:
     volumes:
       - ./prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
+    networks:
+      - observability
     restart: unless-stopped
     depends_on:
       - cadvisor
@@ -61,6 +74,8 @@ services:
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - observability
     restart: unless-stopped
 
   node-exporter:
@@ -73,9 +88,17 @@ services:
       - --path.rootfs=/host
     volumes:
       - /:/host:ro,rslave
+    networks:
+      - observability
     restart: unless-stopped
 
 volumes:
   loki-data:
   grafana-data:
   prometheus-data:
+
+networks:
+  observability:
+    driver: bridge
+  fitznet:
+    external: true
