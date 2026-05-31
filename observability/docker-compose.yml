@@ -17,6 +17,8 @@ services:
       - "3000"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     labels:
       caddy: logs.fitznet.org
       caddy.reverse_proxy: "{{upstreams 3000}}"
@@ -53,6 +55,9 @@ services:
     volumes:
       - ./prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
+    networks:
+      - default
+      - fitznet
     restart: unless-stopped
     depends_on:
       - cadvisor
