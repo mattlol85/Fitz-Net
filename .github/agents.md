@@ -14,6 +14,7 @@ Fitz-Net is a personal full-stack platform consisting of four sibling repositori
 | **fitz-net-api** | `../fitz-net-api` | REST API backend | Java 21, Spring Boot 3.4, Gradle, MongoDB |
 | **fitz-net-website** | `../fitz-net-website` | React SPA frontend | React 19, Vite, React Router v7 |
 | **GamerBell** | `../GamerBell` | WebSocket relay + OTA firmware server | Java 21, Spring Boot 3.4, Gradle |
+| **Esp32FitznetBell** | `../Esp32FitznetBell` | ESP32 firmware — WebSocket client, OLED display, OTA updates | C++, PlatformIO, Arduino |
 
 For deep development context on each repo, see their individual `.github/agents.md` files.
 
@@ -35,7 +36,8 @@ When building a feature that spans multiple repos:
 2. Define the API contract first (request/response shape) before writing any code
 3. Implement backend (`fitz-net-api`) before frontend (`fitz-net-website`)
 4. For GamerBell/WebSocket changes: update `ButtonEventDto` and the corresponding `WebSocketButton.jsx` in `fitz-net-website` in sync
-5. See `Fitz-Net-Agent-Sandbox/AGENT_INSTRUCTIONS.md` for the full cross-repo workflow and pitfall reference
+5. For OTA firmware changes: GamerBell serves the firmware binary and Esp32FitznetBell consumes it — a new release tag in `Esp32FitznetBell` must match what GamerBell's `firmware.github.repo` config points to
+6. See `Fitz-Net-Agent-Sandbox/AGENT_INSTRUCTIONS.md` for the full cross-repo workflow and pitfall reference
 
 ---
 
