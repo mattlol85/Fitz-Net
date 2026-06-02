@@ -15,13 +15,13 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
 
-  # Spring Boot Actuator — requires micrometer-registry-prometheus in each service
+  # Spring Boot Actuator — both services are on the fitznet Docker network
   - job_name: fitz-net-api
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['host.docker.internal:8080']
+      - targets: ['fitz-net-api:8080']
 
   - job_name: gamerbell
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['host.docker.internal:8081']
+      - targets: ['gamerbell:8080']
