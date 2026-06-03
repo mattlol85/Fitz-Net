@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Fitz-Net is a full-stack platform consisting of four independent sibling repositories. This repo (`Fitz-Net`) is the orchestration hub — it holds GitHub Actions workflows and shared agent documentation but contains no application code.
+Fitz-Net is a full-stack platform consisting of five independent sibling repositories. This repo (`Fitz-Net`) is the orchestration hub — it holds GitHub Actions workflows and shared agent documentation but contains no application code.
 
 | Repo | Path | Role | Stack |
 |---|---|---|---|
@@ -10,6 +10,7 @@ Fitz-Net is a full-stack platform consisting of four independent sibling reposit
 | **fitz-net-api** | `../fitz-net-api` | REST API backend | Java 21, Spring Boot 3.4, Gradle, MongoDB |
 | **fitz-net-website** | `../fitz-net-website` | React SPA frontend | React 19, Vite, React Router v7 |
 | **GamerBell** | `../GamerBell` | WebSocket relay + OTA firmware server for ESP32 bells | Java 21, Spring Boot 3.4, Gradle |
+| **Esp32FitznetBell** | `../Esp32FitznetBell` | ESP32 bell button firmware — connects to GamerBell over WebSocket, OTA-updated | C++, PlatformIO, Arduino |
 
 Each repo has its own `.github/agents.md` with deep per-repo conventions. The sections below cover cross-repo feature development.
 
@@ -99,6 +100,33 @@ Spring Boot WebSocket relay that bridges ESP32 button devices with the Fitz-Net 
 cd ../GamerBell
 ./gradlew test
 ./gradlew bootRun --args='--spring.profiles.active=dev'
+```
+
+### Esp32FitznetBell (`Esp32FitznetBell`)
+
+C++ / PlatformIO firmware for the physical ESP32 bell button. It connects to GamerBell over a WebSocket and mirrors button activity on a local OLED screen. New builds are published as GitHub Releases and pushed to devices over the air through GamerBell's firmware endpoint.
+
+| Area | Location | Notes |
+|---|---|---|
+| Firmware entry point | `src/main.cpp` | Setup/loop, WebSocket client, button + OLED logic |
+| Build config | `platformio.ini` | `board = esp32dev`, `framework = arduino`, `lib_deps` |
+| Headers / shared code | `include/`, `lib/` | Project headers and local libraries |
+
+**Hardware:** ESP32 DevKit · 0.96" SSD1306 OLED (I2C: SDA GPIO 21, SCL GPIO 22) · push button on GPIO 13 (internal pull-up).
+
+**Key conventions:**
+- Built with **PlatformIO** (VS Code). Libraries are pulled automatically via `platformio.ini` `lib_deps`: `Adafruit SSD1306`, `Adafruit GFX`, `ArduinoJson`, `WiFiManager`, `links2004/WebSockets`, `FastLED`.
+- WiFi credentials and the user's display name are **not** hardcoded — they're set at first boot via the `FitzNetBell-Setup` WiFiManager captive portal (`192.168.4.1`).
+- The WebSocket payload (press/release events with the user's name) must stay aligned with GamerBell's `ButtonEventDto`. Verify the server IP/port in `src/main.cpp` before flashing.
+- Firmware is delivered OTA via GamerBell `GET /api/firmware/latest`, which serves `.bin` artifacts from this repo's GitHub Releases — bump the version and publish a release to ship an update.
+- Serial monitor baud rate: `115200`. Set `-DENABLE_DIAGNOSTICS=1` in `platformio.ini` for verbose WebSocket/HTTP logs.
+
+**Build & Flash:**
+```bash
+cd ../Esp32FitznetBell
+pio run                 # Compile firmware
+pio run --target upload  # Flash to a connected ESP32 over USB
+pio device monitor       # View serial output (115200 baud)
 ```
 
 ---
