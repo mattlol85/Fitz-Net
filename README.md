@@ -54,6 +54,7 @@
         <li><a href="#fitz-net-website">fitz-net-website</a></li>
         <li><a href="#fitz-net-api">fitz-net-api</a></li>
         <li><a href="#gamerbell">GamerBell</a></li>
+        <li><a href="#esp32fitznetbell">Esp32FitznetBell</a></li>
         <li><a href="#mail-server">Mail Server</a></li>
       </ul>
     </li>
@@ -270,6 +271,18 @@ Spring Boot WebSocket relay service bridging physical ESP32 button devices with 
 
 ---
 
+### Esp32FitznetBell
+
+**Repo:** [mattlol85/Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell)
+
+C++ / PlatformIO firmware for the physical ESP32 bell button. The device connects to **GamerBell** over a WebSocket to broadcast button press/release events and shows the currently active users on a local 0.96" OLED screen. WiFi credentials and the user's display name are configured at first boot through the `FitzNetBell-Setup` WiFiManager captive portal — nothing is hardcoded. New firmware is published as GitHub Releases and pushed to devices over the air via GamerBell's `GET /api/firmware/latest`.
+
+**Hardware:** ESP32 DevKit · SSD1306 OLED (I2C — SDA GPIO 21, SCL GPIO 22) · push button on GPIO 13.
+
+**Stack:** C++ · PlatformIO · Arduino framework · WebSockets · Adafruit SSD1306/GFX · ArduinoJson · WiFiManager · FastLED
+
+---
+
 ### Mail Server
 
 **Config:** [`Fitz-Net-Agent-Sandbox/mail/`](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox)  
@@ -343,6 +356,15 @@ npm run dev
 ```sh
 cd GamerBell
 ./gradlew bootRun --args='--spring.profiles.active=dev'
+```
+
+**Esp32FitznetBell** — requires [PlatformIO](https://platformio.org/) and an ESP32 board:
+```sh
+cd Esp32FitznetBell
+pio run                 # Compile firmware
+pio run --target upload  # Flash to a connected ESP32 over USB
+pio device monitor       # Serial logs (115200 baud)
+# First boot: connect to the "FitzNetBell-Setup" WiFi AP to set WiFi + display name
 ```
 
 **Mail stack** — run on the Proxmox Docker host:

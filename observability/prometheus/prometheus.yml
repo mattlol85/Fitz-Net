@@ -27,7 +27,7 @@ scrape_configs:
           service: node-exporter
           instance: node-exporter
 
-  # Spring Boot Actuator — requires micrometer-registry-prometheus in each service
+  # Spring Boot Actuator — both services are on the fitznet Docker network
   - job_name: fitz-net-api
     metrics_path: /actuator/prometheus
     static_configs:
