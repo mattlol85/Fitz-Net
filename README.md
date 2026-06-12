@@ -380,9 +380,20 @@ docker exec -ti mailserver setup config dkim
 **Observability stack** — run on the Docker host:
 ```sh
 cd observability
+# Requires GRAFANA_ADMIN_PASSWORD in observability/.env (see .env.example)
 docker compose up -d
-# Grafana UI available at https://logs.fitznet.org (default login: admin / admin)
+# Grafana UI available at https://logs.fitznet.org (login: admin / $GRAFANA_ADMIN_PASSWORD)
+# Existing installs: the env var only applies to a fresh DB - reset the password once with
+#   docker exec grafana grafana cli admin reset-admin-password "$GRAFANA_ADMIN_PASSWORD"
 ```
+
+**Upgrading Grafana across major versions** (DB migrations are one-way):
+```sh
+# 1. Back up the data volume
+docker run --rm -v observability_grafana-data:/data -v $PWD:/backup alpine tar czf /backup/grafana-data-backup.tgz /data
+# 2. Step through majors: 10.x -> 11.6.15 -> 12.4.4, verifying login + dashboards at each step
+```
+Anonymous access and sign-up are disabled via `GF_*` env vars in `observability/docker-compose.yml`; Grafana's own auth (strong password, no anonymous) is the access control for the internet-facing UI.
 
 See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
 See [`docs/mail-server.md`](docs/mail-server.md) for the complete mail server setup guide.
