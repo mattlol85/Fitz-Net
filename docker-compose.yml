@@ -22,6 +22,12 @@ services:
       - "8080"
     labels:
       caddy: gamerbell.fitznet.doomdns.org
+      # Block actuator from the internet except health/info (read browser-side by the
+      # website status dashboard). Prometheus scrapes gamerbell:8080 directly over the
+      # internal Docker network, so it is unaffected by this edge block.
+      caddy.@blockedActuator.path: "/actuator /actuator/*"
+      caddy.@blockedActuator.not.path: "/actuator/health /actuator/info"
+      caddy.respond: "@blockedActuator 403"
       caddy.reverse_proxy: "{{upstreams 8080}}"
       caddy_network: fitznet
     depends_on:
@@ -45,6 +51,11 @@ services:
       - "8080"
     labels:
       caddy: api.fitznet.doomdns.org, api.fitznet.org
+      # Same edge block as gamerbell: /actuator/prometheus is permitAll in the app
+      # and must not be readable from the internet; internal scraping bypasses Caddy.
+      caddy.@blockedActuator.path: "/actuator /actuator/*"
+      caddy.@blockedActuator.not.path: "/actuator/health /actuator/info"
+      caddy.respond: "@blockedActuator 403"
       caddy.reverse_proxy: "{{upstreams 8080}}"
       caddy_network: fitznet
     depends_on:
