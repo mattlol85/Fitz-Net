@@ -55,6 +55,7 @@
         <li><a href="#fitz-net-api">fitz-net-api</a></li>
         <li><a href="#gamerbell">GamerBell</a></li>
         <li><a href="#esp32fitznetbell">Esp32FitznetBell</a></li>
+        <li><a href="#fitz-bot">Fitz-Bot</a></li>
         <li><a href="#mail-server">Mail Server</a></li>
       </ul>
     </li>
@@ -74,7 +75,7 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://fitznet.org)
 
-Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, a self-hosted email server for `fitznet.org`, and a full observability stack (Grafana, Loki, Prometheus, Promtail, cAdvisor).
+Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, a self-hosted email server for `fitznet.org`, a Discord bot (**Fitz-Bot**) that manages a Minecraft server, and a full observability stack (Grafana, Loki, Prometheus, Promtail, cAdvisor).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -121,9 +122,16 @@ graph TD
                 NodeExp["node-exporter\n:9100"]
             end
         end
+
+        FitzBot["🤖 Fitz-Bot\nDiscord bot · Spring Boot"]
+
+        subgraph VM3["Ubuntu VM · Minecraft Server"]
+            MC["Minecraft Server\nRCON :25575 · whitelist"]
+        end
     end
 
     ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
+    Discord(["💬 Discord"])
 
     Internet --> FitznetOrg --> DNS --> Router
     Router -->|"80/443"| Caddy
@@ -136,6 +144,8 @@ graph TD
     API --> Mongo
     MailServer --> Roundcube
     ESP32 -->|"wss"| Bell
+    Discord <-->|"slash commands"| FitzBot
+    FitzBot -->|"RCON · whitelist add"| MC
 
     Promtail -->|"logs"| Loki
     CAdvisor -->|"metrics"| Prometheus
@@ -207,6 +217,7 @@ graph LR
 | [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React 19 SPA — dashboard, live board, game stats, auth, password reset |
 | [GamerBell](https://github.com/mattlol85/GamerBell) | Spring Boot WebSocket relay + OTA firmware server for ESP32 bells |
 | [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | C++ / PlatformIO firmware for the physical ESP32 bell button |
+| [Fitz-Bot](https://github.com/mattlol85/Fitz-Bot) | Discord bot — voice-join milestones, media downloads (Radarr/Sonarr), Minecraft whitelist management |
 | [Fitz-Net-Agent-Sandbox](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox) | AI agent workspace + mail server Docker Compose config |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -280,6 +291,38 @@ C++ / PlatformIO firmware for the physical ESP32 bell button. The device connect
 **Hardware:** ESP32 DevKit · SSD1306 OLED (I2C — SDA GPIO 21, SCL GPIO 22) · push button on GPIO 13.
 
 **Stack:** C++ · PlatformIO · Arduino framework · WebSockets · Adafruit SSD1306/GFX · ArduinoJson · WiFiManager · FastLED
+
+---
+
+### Fitz-Bot
+
+**Repo:** [mattlol85/Fitz-Bot](https://github.com/mattlol85/Fitz-Bot)
+
+Discord bot for the Fitz-Net community. Built on JDA, it tracks voice-channel activity and posts milestone celebrations, exposes media-download commands backed by Radarr/Sonarr, and manages the **Minecraft server** that runs on a separate VM adjacent to the Docker host.
+
+The `/whitelist <username>` command lets trusted members (gated by a configurable Discord role) add players to the Minecraft whitelist over **RCON**. Together with `white-list=true` + `online-mode=true` on the server, this keeps anonymous crawlers/bots out.
+
+**Slash commands:**
+
+| Command | Purpose |
+|---|---|
+| `/whitelist <username>` | Add a player to the Minecraft whitelist (role-gated) |
+| `/setwhitelistrole <role>` | Choose which Discord role may use `/whitelist` (admin) |
+| `/setbotchannel` · `/getbotchannel` | Configure where milestone messages post |
+| `/joenet download` · `/joenet status` | Search/queue movies & TV (Radarr/Sonarr) |
+
+**Stack:** Java 21 · Spring Boot 3.2 · JDA 5 · Gradle
+
+**Key environment variables:**
+
+| Variable | Purpose |
+|---|---|
+| `DISCORD_BOT_TOKEN` | Discord bot token |
+| `MINECRAFT_RCON_HOST` / `MINECRAFT_RCON_PORT` | Minecraft server RCON endpoint |
+| `MINECRAFT_RCON_PASSWORD` | RCON password (matches `rcon.password` in `server.properties`) |
+| `JOENET_HOST` · `JOENET_RADARR_APIKEY` · `JOENET_SONARR_APIKEY` | Media download integration |
+
+See [`docs/fitz-bot.md`](docs/fitz-bot.md) for the Minecraft topology and whitelist/RCON setup guide.
 
 ---
 
