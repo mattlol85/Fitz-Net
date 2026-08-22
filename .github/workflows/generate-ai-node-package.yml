@@ -1,0 +1,71 @@
+name: 🔐 Generate AI Node Installer Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      node-name:
+        description: "Node name (alphanumeric + hyphens, e.g. brother-pc)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: 📦 Generate node package
+    # Runs on the existing self-hosted runner on the Proxmox Docker host rather
+    # than a GitHub-hosted runner, so the SSH private key is only ever decrypted
+    # onto infrastructure we already control — it never touches a public-cloud VM.
+    runs-on: [self-hosted, fitznet]
+
+    steps:
+      - name: 🔍 Validate node name
+        run: |
+          NAME="${{ github.event.inputs.node-name }}"
+          if [[ ! "$NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]]; then
+            echo "Invalid node name: '$NAME' (alphanumeric + hyphens only)" >&2
+            exit 1
+          fi
+
+      - name: 📥 Checkout code
+        uses: actions/checkout@v6
+
+      - name: 🔑 Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.OPENVPN_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" | sed 's/\r$//' > ~/.ssh/fitznet_onboarder
+          chmod 600 ~/.ssh/fitznet_onboarder
+          ssh-keyscan -p 22 -H fitznet.doomdns.org >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 🌐 Generate OpenVPN profile on the OpenVPN server
+        run: |
+          echo "::group::Requesting profile for '${{ github.event.inputs.node-name }}'"
+          ssh -i ~/.ssh/fitznet_onboarder -p 22 -o BatchMode=yes -o ConnectTimeout=15 \
+            matt@fitznet.doomdns.org "add ${{ github.event.inputs.node-name }}" \
+            > scripts/ai-node-installer/node.ovpn
+          echo "::endgroup::"
+
+      - name: 📦 Build installer zip
+        run: |
+          cd scripts/ai-node-installer
+          zip "fitz-net-ai-node-${{ github.event.inputs.node-name }}.zip" install-ai-node.ps1 heartbeat.ps1 node.ovpn
+
+      - name: 📤 Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: fitz-net-ai-node-${{ github.event.inputs.node-name }}
+          path: scripts/ai-node-installer/fitz-net-ai-node-${{ github.event.inputs.node-name }}.zip
+          retention-days: 7
+
+      - name: 🧹 Clean up secrets from runner workspace
+        if: always()
+        run: |
+          # This runner's workspace persists between runs (unlike GitHub-hosted
+          # runners), so the private key and generated profile must be removed
+          # explicitly or they'd linger unencrypted on disk after every run.
+          rm -f ~/.ssh/fitznet_onboarder
+          rm -f scripts/ai-node-installer/node.ovpn
+          rm -f scripts/ai-node-installer/fitz-net-ai-node-*.zip

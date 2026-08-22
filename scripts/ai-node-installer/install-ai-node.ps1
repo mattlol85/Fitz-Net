@@ -36,7 +36,7 @@ $ErrorActionPreference = "Stop"
 
 $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
-$OvpnSourcePath = Join-Path $PSScriptRoot "brother-pc.ovpn"
+$OvpnSourcePath = Join-Path $PSScriptRoot "node.ovpn"
 $OpenVpnConfigAutoDir = "C:\Program Files\OpenVPN\config-auto"
 $HeartbeatScriptPath = Join-Path $InstallDir "heartbeat.ps1"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
@@ -88,7 +88,7 @@ if ($openVpnInstalled) {
 # ── 3. OpenVPN profile (auto-start service, no GUI needed) ─────────────────
 Write-Step "Installing OpenVPN profile"
 if (-not (Test-Path $OvpnSourcePath)) {
-    Write-Host "    WARNING: brother-pc.ovpn not found next to this script — skipping VPN setup." -ForegroundColor Yellow
+    Write-Host "    WARNING: node.ovpn not found next to this script — skipping VPN setup." -ForegroundColor Yellow
     Write-Host "    The node will still register, but won't have a VPN tunnel until you add the profile and re-run this script." -ForegroundColor Yellow
 } else {
     New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
