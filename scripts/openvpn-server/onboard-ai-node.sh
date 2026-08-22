@@ -131,7 +131,7 @@ pivpn_add() {
 
 pivpn_revoke() {
   log "Detected PiVPN. Revoking client '$NAME'..."
-  pivpn revoke -n "$NAME"
+  pivpn revoke --yes "$NAME"
   log "Revoked. PiVPN restarts the OpenVPN service automatically."
 }
 
