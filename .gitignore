@@ -22,3 +22,6 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# per-node OpenVPN client profiles (secrets) dropped in before zipping the installer
+scripts/ai-node-installer/*.ovpn
