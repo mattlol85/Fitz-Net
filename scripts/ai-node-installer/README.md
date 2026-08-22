@@ -15,9 +15,13 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
    This returns `{"token": "...", "expiresAt": "..."}`. The token is valid for 30 minutes and can only be used once.
 
-2. **Get a client `.ovpn` profile from your existing OpenVPN server.** See the note at the bottom of this file — this is a manual step on the Linux VPN box, not scripted here. Save the resulting single-file profile as `brother-pc.ovpn` in this folder (same directory as `install-ai-node.ps1`).
+2. **Get a client `.ovpn` profile.** Two ways:
+   - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
+   - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
-3. **Zip it up.** Select `install-ai-node.ps1`, `heartbeat.ps1`, and `brother-pc.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`). Send that zip to the node owner, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
+3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `heartbeat.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`).
+
+4. **Send the zip to the node owner**, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
 
 ## What the node owner does
 
@@ -31,17 +35,10 @@ That's it — Ollama and the OpenVPN client are installed if missing, the VPN pr
 
 - `install-ai-node.ps1` — the main installer, run once by the node owner.
 - `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates.
-- `brother-pc.ovpn` — **not committed** (gitignored, per-node secret) — you generate and drop this in before zipping. Naming is just a placeholder; use whatever you like as long as `install-ai-node.ps1`'s `-OvpnSourcePath` default (`brother-pc.ovpn`, same folder) matches, or edit the script.
+- `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. Naming matches `install-ai-node.ps1`'s `-OvpnSourcePath` default (`node.ovpn`, same folder); pass `-OvpnSourcePath` explicitly if you use a different name.
 
-## Manual step: generating the `.ovpn` profile on your existing OpenVPN server
+## Manual step: generating the `.ovpn` profile by hand
 
-This part is not scripted or tracked in this repo — do it by hand on the Linux box running your OpenVPN server:
-
-```bash
-# From your easy-rsa directory on the OpenVPN server
-./easyrsa build-client-full ai-node-brother-pc nopass
-```
-
-Then assemble a **single-file** `.ovpn` profile (inline `<ca>`, `<cert>`, `<key>` blocks) so there's just one file to hand off — most OpenVPN server setups have a base client template you can append the cert/key into. Copy the result here as `brother-pc.ovpn` before zipping.
+Covered in full in [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) — use this only if you're not using the GitHub Actions workflow from step 2.
 
 Note: node registration and heartbeats talk to `fitz-net-api` over its existing public HTTPS endpoint, not over this VPN — the tunnel isn't required for phase 1 to work. It's laying the groundwork for later phases, when the orchestrator needs to reach the node's Ollama port privately. When that's needed, revisit whether the VPN server allows client-to-client traffic or needs a route to the Docker host's subnet.
