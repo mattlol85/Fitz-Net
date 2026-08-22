@@ -114,7 +114,7 @@ find_client_template() {
 # ── PiVPN path ───────────────────────────────────────────────────────────────
 pivpn_add() {
   log "Detected PiVPN. Adding client '$NAME' (no passphrase, unattended)..."
-  pivpn add nopass -n "$NAME"
+  pivpn add nopass -n "$NAME" -d "${CERT_DAYS:-3650}"
 
   log "Looking for the generated .ovpn..."
   local found
