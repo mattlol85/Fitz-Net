@@ -22,6 +22,19 @@
 .PARAMETER ApiBaseUrl
     Base URL of fitz-net-api. Defaults to the production API.
 
+.PARAMETER OllamaAddress
+    "host:port" that fitz-net-api should use to reach this node's Ollama
+    instance (e.g. "192.168.1.50:11434"). If omitted, auto-detected from
+    this machine's LAN IPv4 address. Only needed as an override if
+    auto-detection picks the wrong network adapter.
+
+.PARAMETER AutoStartVpn
+    Whether the OpenVPN profile should connect automatically every time this
+    PC boots ("yes"/"no"). If omitted, you'll be asked. Choose "no" if you'd
+    rather this PC's VPN tunnel only be active when you deliberately start it
+    yourself (via the OpenVPN GUI) - some people don't want a VPN silently
+    up in the background all the time.
+
 .EXAMPLE
     .\install-ai-node.ps1 -Token "abc123..." -NodeName "brother-pc"
 #>
@@ -29,7 +42,9 @@
 param(
     [string]$Token,
     [string]$NodeName = $env:COMPUTERNAME,
-    [string]$ApiBaseUrl = "https://api.fitznet.doomdns.org"
+    [string]$ApiBaseUrl = "https://api.fitznet.doomdns.org",
+    [string]$OllamaAddress,
+    [string]$AutoStartVpn
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,6 +67,18 @@ function Write-Success($message) {
 
 function Write-Skip($message) {
     Write-Host "    $message" -ForegroundColor DarkGray
+}
+
+function Get-LanIPv4Address {
+    $candidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.IPAddress -notlike "169.254.*" -and
+            $_.InterfaceAlias -notmatch "Loopback|OpenVPN|TAP|vEthernet"
+        } |
+        Select-Object -First 1
+    if ($candidate) { return $candidate.IPAddress }
+    return $null
 }
 
 # -- 0. Prompt for token if not supplied --------------------------------------
@@ -85,28 +112,42 @@ if ($openVpnInstalled) {
     Write-Success "OpenVPN client installed."
 }
 
-# -- 3. OpenVPN profile (auto-start service, no GUI needed) -----------------
+# -- 3. OpenVPN profile ---------------------------------------------------------
 Write-Step "Installing OpenVPN profile"
 if (-not (Test-Path $OvpnSourcePath)) {
     Write-Host "    WARNING: node.ovpn not found next to this script - skipping VPN setup." -ForegroundColor Yellow
     Write-Host "    The node will still register, but won't have a VPN tunnel until you add the profile and re-run this script." -ForegroundColor Yellow
 } else {
-    New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
-    $destOvpn = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
-    Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
-    Write-Success "Profile copied to $destOvpn (auto-starts as a service on boot)."
+    if (-not $AutoStartVpn) {
+        $AutoStartVpn = Read-Host "Connect the VPN automatically every time this PC boots? (yes/no)"
+    }
+    $autoStart = $AutoStartVpn -match '^(y|yes)$'
 
-    $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
-    if ($service) {
-        Set-Service -Name "OpenVPNService" -StartupType Automatic
-        if ($service.Status -ne "Running") {
-            Start-Service -Name "OpenVPNService"
+    if ($autoStart) {
+        New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
+        $destOvpn = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
+        Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+        Write-Success "Profile copied to $destOvpn (auto-connects as a service on boot)."
+
+        $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
+        if ($service) {
+            Set-Service -Name "OpenVPNService" -StartupType Automatic
+            if ($service.Status -ne "Running") {
+                Start-Service -Name "OpenVPNService"
+            } else {
+                Restart-Service -Name "OpenVPNService"
+            }
+            Write-Success "OpenVPN service is running and set to start automatically."
         } else {
-            Restart-Service -Name "OpenVPNService"
+            Write-Host "    WARNING: OpenVPNService not found - you may need to reboot or start it manually from the OpenVPN GUI." -ForegroundColor Yellow
         }
-        Write-Success "OpenVPN service is running and set to start automatically."
     } else {
-        Write-Host "    WARNING: OpenVPNService not found - you may need to reboot or start it manually from the OpenVPN GUI." -ForegroundColor Yellow
+        $manualConfigDir = "C:\Program Files\OpenVPN\config"
+        New-Item -ItemType Directory -Force -Path $manualConfigDir | Out-Null
+        $destOvpn = Join-Path $manualConfigDir "fitznet-node.ovpn"
+        Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+        Write-Success "Profile copied to $destOvpn (does NOT auto-connect)."
+        Write-Host "    To connect: open the OpenVPN GUI, right-click its tray icon, and choose 'fitznet-node' > Connect." -ForegroundColor Yellow
     }
 }
 
@@ -126,7 +167,55 @@ if ($nvidiaSmi) {
     Write-Skip "nvidia-smi not found; continuing without GPU info."
 }
 
-# -- 5. Register the node ------------------------------------------------------
+# -- 5. Enable remote access to Ollama -----------------------------------------
+Write-Step "Enabling remote access to Ollama"
+[Environment]::SetEnvironmentVariable("OLLAMA_HOST", "0.0.0.0", "Machine")
+$env:OLLAMA_HOST = "0.0.0.0"
+Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Write-Success "Set OLLAMA_HOST=0.0.0.0 (machine-wide)."
+
+# Give whatever relaunches Ollama (its own tray-app supervisor, if present) a
+# few seconds, then confirm it's actually back up before moving on - the next
+# step queries this same endpoint for the installed model list.
+$ollamaBackUp = $false
+for ($i = 0; $i -lt 5; $i++) {
+    Start-Sleep -Seconds 2
+    try {
+        Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 3 -ErrorAction Stop | Out-Null
+        $ollamaBackUp = $true
+        break
+    } catch {
+        continue
+    }
+}
+if ($ollamaBackUp) {
+    Write-Success "Ollama is back up and reachable."
+} else {
+    Write-Host "    WARNING: Ollama didn't come back up on its own - open it from the Start Menu, or sign out/in or reboot once, then re-run this script." -ForegroundColor Yellow
+}
+
+$firewallRuleName = "Fitz-Net Ollama"
+$existingRule = Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue
+if ($existingRule) {
+    Write-Skip "Firewall rule '$firewallRuleName' already exists."
+} else {
+    New-NetFirewallRule -DisplayName $firewallRuleName -Direction Inbound -Protocol TCP -LocalPort 11434 -Action Allow -Profile Private | Out-Null
+    Write-Success "Opened inbound TCP 11434 (Private network profile only)."
+}
+
+if ($OllamaAddress) {
+    Write-Skip "Using provided -OllamaAddress: $OllamaAddress"
+} else {
+    $lanIp = Get-LanIPv4Address
+    if ($lanIp) {
+        $OllamaAddress = "${lanIp}:11434"
+        Write-Success "Detected LAN address: $OllamaAddress"
+    } else {
+        Write-Host "    WARNING: could not auto-detect a LAN IPv4 address - fitz-net-api won't be able to reach this node's Ollama until you re-run with -OllamaAddress." -ForegroundColor Yellow
+    }
+}
+
+# -- 6. Register the node ------------------------------------------------------
 Write-Step "Registering node with fitz-net-api"
 if (Test-Path $NodeConfigPath) {
     Write-Skip "node.json already exists at $NodeConfigPath - skipping registration."
@@ -149,6 +238,7 @@ if (Test-Path $NodeConfigPath) {
         os      = "Windows"
         models  = @($installedModels)
         vramGb  = $vramGb
+        address = $OllamaAddress
     } | ConvertTo-Json
 
     $response = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/node/register" -ContentType "application/json" -Body $body
@@ -164,7 +254,7 @@ if (Test-Path $NodeConfigPath) {
     Write-Success "Registered as node '$NodeName' (id: $($response.nodeId))."
 }
 
-# -- 6. Heartbeat script + scheduled task --------------------------------------
+# -- 7. Heartbeat script + scheduled task --------------------------------------
 Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
 
