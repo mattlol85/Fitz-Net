@@ -23,7 +23,11 @@ param()
 $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
-$FirewallRuleName = "Fitz-Net Ollama"
+$FirewallRuleNames = @(
+    "Fitz-Net Ollama",
+    "Fitz-Net Ollama (LAN)",
+    "Fitz-Net Ollama (VPN)"
+)
 $OpenVpnConfigAutoDir = "C:\Program Files\OpenVPN\config-auto"
 $OpenVpnConfigDir = "C:\Program Files\OpenVPN\config"
 
@@ -86,12 +90,17 @@ if ($currentValue) {
     Write-Skip "OLLAMA_HOST wasn't set - nothing to revert."
 }
 
-$existingRule = Get-NetFirewallRule -DisplayName $FirewallRuleName -ErrorAction SilentlyContinue
-if ($existingRule) {
-    Remove-NetFirewallRule -DisplayName $FirewallRuleName
-    Write-Success "Removed firewall rule '$FirewallRuleName'."
-} else {
-    Write-Skip "No '$FirewallRuleName' firewall rule found."
+$removedRule = $false
+foreach ($firewallRuleName in $FirewallRuleNames) {
+    $existingRule = Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue
+    if ($existingRule) {
+        Remove-NetFirewallRule -DisplayName $firewallRuleName
+        Write-Success "Removed firewall rule '$firewallRuleName'."
+        $removedRule = $true
+    }
+}
+if (-not $removedRule) {
+    Write-Skip "No Fitz-Net Ollama firewall rules found."
 }
 
 # -- 5. OpenVPN profile -----------------------------------------------------------

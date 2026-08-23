@@ -25,9 +25,9 @@
 
 .PARAMETER OllamaAddress
     "host:port" that fitz-net-api should use to reach this node's Ollama
-    instance (e.g. "192.168.1.50:11434"). If omitted, auto-detected from
-    this machine's LAN IPv4 address. Only needed as an override if
-    auto-detection picks the wrong network adapter.
+    instance (e.g. "192.168.1.50:11434"). This fixed override is persisted
+    and reused by every heartbeat. If omitted, the selected VPN or LAN route
+    is detected each heartbeat.
 
 .PARAMETER InstallVpn
     Whether to install/configure OpenVPN on this PC at all ("yes"/"no"). If
@@ -64,8 +64,14 @@ $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $OvpnSourcePath = Join-Path $PSScriptRoot "node.ovpn"
 $OpenVpnConfigAutoDir = "C:\Program Files\OpenVPN\config-auto"
+$OpenVpnConfigDir = "C:\Program Files\OpenVPN\config"
 $HeartbeatScriptPath = Join-Path $InstallDir "heartbeat.ps1"
+$NetworkHelperSourcePath = Join-Path $PSScriptRoot "node-network.ps1"
+$NetworkHelperInstallPath = Join-Path $InstallDir "node-network.ps1"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
+$LegacyFirewallRuleName = "Fitz-Net Ollama"
+$LanFirewallRuleName = "Fitz-Net Ollama (LAN)"
+$VpnFirewallRuleName = "Fitz-Net Ollama (VPN)"
 
 function Write-Step($message) {
     Write-Host ""
@@ -80,58 +86,41 @@ function Write-Skip($message) {
     Write-Host "    $message" -ForegroundColor DarkGray
 }
 
-function Get-LanIPv4Address {
-    $candidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.IPAddress -ne "127.0.0.1" -and
-            $_.IPAddress -notlike "169.254.*" -and
-            $_.InterfaceAlias -notmatch "Loopback|OpenVPN|TAP|vEthernet"
-        } |
-        Select-Object -First 1
-    if ($candidate) { return $candidate.IPAddress }
-    return $null
+
+if (-not (Test-Path $NetworkHelperSourcePath)) {
+    throw "node-network.ps1 was not found next to the installer. Re-download the complete installer package."
+}
+. $NetworkHelperSourcePath
+
+$existingConfig = $null
+if (Test-Path $NodeConfigPath) {
+    $existingConfig = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
 }
 
-function Get-VpnIPv4Address {
-    $candidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.IPAddress -ne "127.0.0.1" -and
-            $_.IPAddress -notlike "169.254.*" -and
-            $_.InterfaceAlias -match "OpenVPN|TAP"
-        } |
-        Select-Object -First 1
-    if ($candidate) { return $candidate.IPAddress }
-    return $null
-}
-
-function Set-VpnAdapterPrivate {
-    # Windows classifies a new VPN/TAP adapter as "Public" by default, which
-    # means the firewall rule opening 11434 (deliberately scoped to Private,
-    # not Public) silently doesn't apply to traffic arriving over it. Force
-    # it to Private so remote nodes over the VPN are actually reachable.
-    $vpnInterface = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.InterfaceAlias -match "OpenVPN|TAP" } |
-        Select-Object -First 1
-    if (-not $vpnInterface) { return }
-
-    $profile = Get-NetConnectionProfile -InterfaceIndex $vpnInterface.InterfaceIndex -ErrorAction SilentlyContinue
-    if ($profile -and $profile.NetworkCategory -ne "Private") {
-        Set-NetConnectionProfile -InterfaceIndex $vpnInterface.InterfaceIndex -NetworkCategory Private -ErrorAction SilentlyContinue
+# -- 0. Choose the persistent routing mode ------------------------------------
+if (-not $InstallVpn) {
+    if ($existingConfig -and $existingConfig.addressMode -eq "vpn") {
+        $InstallVpn = "yes"
+    } elseif ($existingConfig -and $existingConfig.addressMode -eq "lan") {
+        $InstallVpn = "no"
+    } elseif ($existingConfig -and $existingConfig.addressMode -eq "fixed") {
+        $hasInstalledProfile = (Test-Path (Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn")) -or
+            (Test-Path (Join-Path $OpenVpnConfigDir "fitznet-node.ovpn"))
+        $InstallVpn = if ($hasInstalledProfile) { "yes" } else { "no" }
+    } else {
+        $InstallVpn = Read-Host "Install/connect the Fitz-Net OpenVPN profile on this PC? (yes/no)"
     }
 }
-
-# -- 0. Prompt for token if not supplied --------------------------------------
-if (-not $Token) {
-    $Token = Read-Host "Enter the enrollment token given to you"
-}
-if ([string]::IsNullOrWhiteSpace($Token)) {
-    throw "An enrollment token is required."
-}
-
-if (-not $InstallVpn) {
-    $InstallVpn = Read-Host "Install/connect the Fitz-Net OpenVPN profile on this PC? (yes/no)"
-}
 $installVpn = $InstallVpn -match '^(y|yes)$'
+$addressMode = if ($OllamaAddress) { "fixed" } elseif ($installVpn) { "vpn" } else { "lan" }
+if (-not $OllamaAddress -and $existingConfig -and $existingConfig.addressMode -eq "fixed") {
+    $addressMode = "fixed"
+    $OllamaAddress = [string]$existingConfig.ollamaAddress
+}
+
+if ($installVpn -and -not (Test-Path $OvpnSourcePath)) {
+    throw "VPN installation was selected, but node.ovpn is missing next to this script. Re-download a complete per-node package or re-run with -InstallVpn no for a LAN-only node."
+}
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
@@ -165,9 +154,6 @@ Write-Step "Installing OpenVPN profile"
 if (-not $installVpn) {
     Write-Skip "Skipped - you opted out of OpenVPN for this PC."
     Write-Skip "The node still registers and works for local/LAN chat routing without it."
-} elseif (-not (Test-Path $OvpnSourcePath)) {
-    Write-Host "    WARNING: node.ovpn not found next to this script - skipping VPN setup." -ForegroundColor Yellow
-    Write-Host "    The node will still register, but won't have a VPN tunnel until you add the profile and re-run this script." -ForegroundColor Yellow
 } else {
     if (-not $AutoStartVpn) {
         $AutoStartVpn = Read-Host "Connect the VPN automatically every time this PC boots? (yes/no)"
@@ -178,6 +164,7 @@ if (-not $installVpn) {
         New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
         $destOvpn = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
         Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+        Remove-Item -Path (Join-Path $OpenVpnConfigDir "fitznet-node.ovpn") -Force -ErrorAction SilentlyContinue
         Write-Success "Profile copied to $destOvpn (auto-connects as a service on boot)."
 
         $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
@@ -190,30 +177,36 @@ if (-not $installVpn) {
             }
             Write-Success "OpenVPN service is running and set to start automatically."
 
-            # Give the tunnel a few seconds to actually come up, then fix the
-            # network category before anything downstream (the firewall rule,
-            # address detection) depends on it.
+            # Give the tunnel time to establish. An auto-start VPN node must
+            # not register against a LAN fallback if this connection fails.
             $vpnUp = $false
-            for ($i = 0; $i -lt 5; $i++) {
+            for ($i = 0; $i -lt 15; $i++) {
                 Start-Sleep -Seconds 2
                 if (Get-VpnIPv4Address) { $vpnUp = $true; break }
             }
             if ($vpnUp) {
-                Set-VpnAdapterPrivate
-                Write-Success "VPN tunnel is up; set its network category to Private."
+                Write-Success "VPN tunnel is up."
             } else {
-                Write-Host "    WARNING: VPN tunnel didn't come up within 10 seconds - it may still connect shortly on its own; heartbeat.ps1 will pick up its address once it does." -ForegroundColor Yellow
+                throw "The VPN tunnel did not receive an IPv4 address within 30 seconds. Check the OpenVPN service/logs, then re-run this installer. The node was not registered."
             }
         } else {
-            Write-Host "    WARNING: OpenVPNService not found - you may need to reboot or start it manually from the OpenVPN GUI." -ForegroundColor Yellow
+            throw "OpenVPNService was not found after installing OpenVPN. Reboot once, then re-run this installer. The node was not registered."
         }
     } else {
-        $manualConfigDir = "C:\Program Files\OpenVPN\config"
-        New-Item -ItemType Directory -Force -Path $manualConfigDir | Out-Null
-        $destOvpn = Join-Path $manualConfigDir "fitznet-node.ovpn"
+        New-Item -ItemType Directory -Force -Path $OpenVpnConfigDir | Out-Null
+        $destOvpn = Join-Path $OpenVpnConfigDir "fitznet-node.ovpn"
         Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+        $autoProfilePath = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
+        if (Test-Path $autoProfilePath) {
+            Remove-Item -Path $autoProfilePath -Force
+            $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
+            if ($service -and $service.Status -eq "Running") {
+                Restart-Service -Name "OpenVPNService"
+            }
+        }
         Write-Success "Profile copied to $destOvpn (does NOT auto-connect)."
         Write-Host "    To connect: open the OpenVPN GUI, right-click its tray icon, and choose 'fitznet-node' > Connect." -ForegroundColor Yellow
+        Write-Host "    This node will report OFFLINE until the VPN is connected." -ForegroundColor Yellow
     }
 }
 
@@ -260,40 +253,55 @@ if ($ollamaBackUp) {
     Write-Host "    WARNING: Ollama didn't come back up on its own - open it from the Start Menu, or sign out/in or reboot once, then re-run this script." -ForegroundColor Yellow
 }
 
-$firewallRuleName = "Fitz-Net Ollama"
-$existingRule = Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue
-if ($existingRule) {
-    Write-Skip "Firewall rule '$firewallRuleName' already exists."
+# Replace the legacy profile-only rule with a route-specific rule. VPN
+# adapters are often classified Public by Windows, so the VPN rule is scoped
+# to the actual adapter aliases rather than a mutable network category.
+Get-NetFirewallRule -DisplayName $LegacyFirewallRuleName -ErrorAction SilentlyContinue |
+    Remove-NetFirewallRule -ErrorAction SilentlyContinue
+
+if ($installVpn) {
+    Get-NetFirewallRule -DisplayName $LanFirewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    $vpnAliases = @(Get-VpnInterfaceAliases)
+    if ($vpnAliases.Count -eq 0) {
+        throw "No OpenVPN/TAP adapter was found, so a safe VPN-scoped firewall rule could not be created. Repair OpenVPN and re-run this installer."
+    }
+    Get-NetFirewallRule -DisplayName $VpnFirewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName $VpnFirewallRuleName -Direction Inbound -Protocol TCP `
+        -LocalPort 11434 -Action Allow -Profile Any -InterfaceAlias $vpnAliases | Out-Null
+    Write-Success "Opened inbound TCP 11434 on the OpenVPN adapter only."
 } else {
-    New-NetFirewallRule -DisplayName $firewallRuleName -Direction Inbound -Protocol TCP -LocalPort 11434 -Action Allow -Profile Private | Out-Null
-    Write-Success "Opened inbound TCP 11434 (Private network profile only)."
+    Get-NetFirewallRule -DisplayName $VpnFirewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    Get-NetFirewallRule -DisplayName $LanFirewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName $LanFirewallRuleName -Direction Inbound -Protocol TCP `
+        -LocalPort 11434 -Action Allow -Profile Private | Out-Null
+    Write-Success "Opened inbound TCP 11434 on Private networks."
 }
 
-if ($OllamaAddress) {
-    Write-Skip "Using provided -OllamaAddress: $OllamaAddress"
+$detectedAddress = Get-OllamaAddress -AddressMode $addressMode -FixedAddress $OllamaAddress
+if ($addressMode -eq "fixed") {
+    Write-Skip "Using persistent -OllamaAddress: $detectedAddress"
+} elseif ($detectedAddress) {
+    Write-Success "Detected $($addressMode.ToUpperInvariant()) address: $detectedAddress"
 } else {
-    # Prefer the VPN address: it's the only one that's reachable from
-    # fitz-net-api for a node that isn't on the same LAN as it. Falls back
-    # to the LAN address for a node that is (e.g. Matt-Pc, no VPN needed).
-    $vpnIp = Get-VpnIPv4Address
-    $lanIp = Get-LanIPv4Address
-    if ($vpnIp) {
-        $OllamaAddress = "${vpnIp}:11434"
-        Write-Success "Detected VPN address: $OllamaAddress"
-    } elseif ($lanIp) {
-        $OllamaAddress = "${lanIp}:11434"
-        Write-Success "Detected LAN address: $OllamaAddress"
-    } else {
-        Write-Host "    WARNING: could not auto-detect an IPv4 address - fitz-net-api won't be able to reach this node's Ollama until you re-run with -OllamaAddress." -ForegroundColor Yellow
-    }
+    Write-Host "    No $addressMode address is currently available; the node will report OFFLINE until one appears." -ForegroundColor Yellow
 }
 
 # -- 6. Register the node ------------------------------------------------------
 Write-Step "Registering node with fitz-net-api"
 if (Test-Path $NodeConfigPath) {
-    Write-Skip "node.json already exists at $NodeConfigPath - skipping registration."
-    Write-Skip "Delete that file and re-run this script if you need to re-register."
+    Write-Skip "node.json already exists at $NodeConfigPath - preserving the existing registration."
 } else {
+    if (-not $Token) {
+        $Token = Read-Host "Enter the enrollment token given to you"
+    }
+    if ([string]::IsNullOrWhiteSpace($Token)) {
+        throw "An enrollment token is required for a new registration."
+    }
+
     # Query Ollama's local HTTP API rather than shelling out to ollama.exe -
     # see the matching note in heartbeat.ps1 for why (PATH isn't reliable
     # for every context this can run in).
@@ -305,13 +313,15 @@ if (Test-Path $NodeConfigPath) {
         $installedModels = @()
     }
 
+    $registrationAddress = if ($installedModels.Count -gt 0) { $detectedAddress } else { "" }
+
     $body = @{
         token   = $Token
         name    = $NodeName
         os      = "Windows"
         models  = @($installedModels)
         vramGb  = $vramGb
-        address = $OllamaAddress
+        address = $registrationAddress
     } | ConvertTo-Json
 
     $response = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/node/register" -ContentType "application/json" -Body $body
@@ -321,15 +331,28 @@ if (Test-Path $NodeConfigPath) {
         nodeKey    = $response.nodeKey
         apiBaseUrl = $ApiBaseUrl
         nodeName   = $NodeName
+        addressMode = $addressMode
+        ollamaAddress = if ($addressMode -eq "fixed") { $OllamaAddress } else { "" }
     } | ConvertTo-Json
 
     Set-Content -Path $NodeConfigPath -Value $nodeConfig -Encoding UTF8
     Write-Success "Registered as node '$NodeName' (id: $($response.nodeId))."
 }
 
+# Persist the routing choice for both new and existing registrations. This is
+# what prevents a scheduled heartbeat from overwriting a fixed/VPN address
+# with an unrelated LAN address after the installer exits.
+$nodeConfig = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
+$nodeConfig | Add-Member -NotePropertyName addressMode -NotePropertyValue $addressMode -Force
+$nodeConfig | Add-Member -NotePropertyName ollamaAddress `
+    -NotePropertyValue $(if ($addressMode -eq "fixed") { $OllamaAddress } else { "" }) -Force
+$nodeConfig | ConvertTo-Json | Set-Content -Path $NodeConfigPath -Encoding UTF8
+Write-Success "Saved routing mode '$addressMode' for future heartbeats."
+
 # -- 7. Heartbeat script + scheduled task --------------------------------------
 Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
+Copy-Item -Path $NetworkHelperSourcePath -Destination $NetworkHelperInstallPath -Force
 
 $existingTask = Get-ScheduledTask -TaskName $HeartbeatTaskName -ErrorAction SilentlyContinue
 if ($existingTask) {
@@ -346,6 +369,10 @@ if ($existingTask) {
     Register-ScheduledTask -TaskName $HeartbeatTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
     Write-Success "Scheduled task '$HeartbeatTaskName' created (runs every 2 minutes)."
 }
+
+Write-Step "Sending initial readiness heartbeat"
+& $HeartbeatScriptPath
+Write-Success "Reported the node's current chat readiness."
 
 Write-Step "Done"
 Write-Host "    This machine is now registered as a Fitz-Net AI node." -ForegroundColor Green

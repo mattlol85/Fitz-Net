@@ -20,7 +20,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
    - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
-3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller means the node owner has a clean way to remove everything later without re-downloading anything.
+3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller means the node owner has a clean way to remove everything later without re-downloading anything.
 
 4. **Send the zip to the node owner**, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
 
@@ -32,7 +32,9 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 4. If they said yes, it'll also ask whether the VPN should connect automatically on every boot — "yes" if they're fine with it always being on in the background, "no" if they'd rather start it manually from the OpenVPN GUI when they want it active.
 5. Wait for "This machine is now registered as a Fitz-Net AI node."
 
-That's it — Ollama is installed if missing, and a scheduled task heartbeats the node every 2 minutes. The script also opens Ollama up to the local network (sets `OLLAMA_HOST=0.0.0.0`, adds a Windows Firewall rule scoped to the Private network profile only) so `fitz-net-api` can actually route chat prompts to it — this part always happens regardless of the VPN choice. The script is safe to re-run if anything needs retrying.
+That's it — Ollama is installed if missing, and a scheduled task heartbeats the node every 2 minutes. The script sets `OLLAMA_HOST=0.0.0.0` and opens port 11434 either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. A node reports `ONLINE` only while Ollama has a model and its selected route is usable. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.
+
+If VPN installation is selected, `node.ovpn` is required. An auto-start installation also requires the tunnel to receive an address within 30 seconds; otherwise the installer stops instead of registering a node with an unreachable LAN address. A manually connected VPN node remains `OFFLINE` until its tunnel is connected.
 
 ## Removing a node
 
@@ -43,7 +45,8 @@ Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregister
 - `install-ai-node.ps1` — the main installer, run once by the node owner.
 - `uninstall-ai-node.ps1` — cleanly removes everything the installer set up (see "Removing a node" above).
 - `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates.
-- `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. Naming matches `install-ai-node.ps1`'s `-OvpnSourcePath` default (`node.ovpn`, same folder); pass `-OvpnSourcePath` explicitly if you use a different name.
+- `node-network.ps1` — shared route detection used by the installer and heartbeat; it is copied beside the installed heartbeat.
+- `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. It must use this exact name and sit beside `install-ai-node.ps1`.
 
 ## Manual step: generating the `.ovpn` profile by hand
 

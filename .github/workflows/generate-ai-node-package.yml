@@ -51,7 +51,7 @@ jobs:
       - name: 📦 Build installer zip
         run: |
           cd scripts/ai-node-installer
-          zip "fitz-net-ai-node-${{ github.event.inputs.node-name }}.zip" install-ai-node.ps1 uninstall-ai-node.ps1 heartbeat.ps1 node.ovpn
+          zip "fitz-net-ai-node-${{ github.event.inputs.node-name }}.zip" install-ai-node.ps1 uninstall-ai-node.ps1 heartbeat.ps1 node-network.ps1 node.ovpn
 
       - name: 📤 Upload artifact
         uses: actions/upload-artifact@v6
