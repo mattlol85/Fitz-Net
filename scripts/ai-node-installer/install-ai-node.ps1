@@ -4,10 +4,11 @@
     Frictionless installer for a Fitz-Net AI worker node.
 
 .DESCRIPTION
-    Installs Ollama and the OpenVPN client (if missing), drops in the bundled
-    OpenVPN profile so it auto-connects as a Windows service, registers this
-    machine as an AI node with fitz-net-api using a one-time enrollment token,
-    and schedules a recurring heartbeat task.
+    Installs Ollama, opens it up to the local network, registers this machine
+    as an AI node with fitz-net-api using a one-time enrollment token, and
+    schedules a recurring heartbeat task. Optionally installs the OpenVPN
+    client and the bundled OpenVPN profile too (you're asked up front) - the
+    node works for local/LAN chat routing with or without the VPN.
 
     Safe to re-run: every step checks whether it's already done before acting.
 
@@ -28,12 +29,21 @@
     this machine's LAN IPv4 address. Only needed as an override if
     auto-detection picks the wrong network adapter.
 
+.PARAMETER InstallVpn
+    Whether to install/configure OpenVPN on this PC at all ("yes"/"no"). If
+    omitted, you'll be asked up front. Choose "no" to skip OpenVPN entirely -
+    the node still registers and works for local/LAN chat routing either
+    way; the VPN is groundwork for a later phase (reaching a node that's
+    remote, off your LAN). Some people would rather not have OpenVPN
+    installed on their PC at all.
+
 .PARAMETER AutoStartVpn
     Whether the OpenVPN profile should connect automatically every time this
-    PC boots ("yes"/"no"). If omitted, you'll be asked. Choose "no" if you'd
-    rather this PC's VPN tunnel only be active when you deliberately start it
-    yourself (via the OpenVPN GUI) - some people don't want a VPN silently
-    up in the background all the time.
+    PC boots ("yes"/"no"). Only asked if -InstallVpn is "yes". If omitted,
+    you'll be asked. Choose "no" if you'd rather this PC's VPN tunnel only
+    be active when you deliberately start it yourself (via the OpenVPN GUI)
+    - some people don't want a VPN silently up in the background all the
+    time.
 
 .EXAMPLE
     .\install-ai-node.ps1 -Token "abc123..." -NodeName "brother-pc"
@@ -44,6 +54,7 @@ param(
     [string]$NodeName = $env:COMPUTERNAME,
     [string]$ApiBaseUrl = "https://api.fitznet.doomdns.org",
     [string]$OllamaAddress,
+    [string]$InstallVpn,
     [string]$AutoStartVpn
 )
 
@@ -89,6 +100,11 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
     throw "An enrollment token is required."
 }
 
+if (-not $InstallVpn) {
+    $InstallVpn = Read-Host "Install/connect the Fitz-Net OpenVPN profile on this PC? (yes/no)"
+}
+$installVpn = $InstallVpn -match '^(y|yes)$'
+
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 # -- 1. Ollama ------------------------------------------------------------------
@@ -103,18 +119,25 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
 
 # -- 2. OpenVPN client ------------------------------------------------------------
 Write-Step "Checking for OpenVPN client"
-$openVpnInstalled = Test-Path "C:\Program Files\OpenVPN\bin\openvpn.exe"
-if ($openVpnInstalled) {
-    Write-Skip "OpenVPN client already installed."
+if (-not $installVpn) {
+    Write-Skip "Skipped - you opted out of OpenVPN for this PC."
 } else {
-    Write-Host "    Installing OpenVPN client via winget..."
-    winget install --id OpenVPNTechnologies.OpenVPN --silent --accept-package-agreements --accept-source-agreements
-    Write-Success "OpenVPN client installed."
+    $openVpnInstalled = Test-Path "C:\Program Files\OpenVPN\bin\openvpn.exe"
+    if ($openVpnInstalled) {
+        Write-Skip "OpenVPN client already installed."
+    } else {
+        Write-Host "    Installing OpenVPN client via winget..."
+        winget install --id OpenVPNTechnologies.OpenVPN --silent --accept-package-agreements --accept-source-agreements
+        Write-Success "OpenVPN client installed."
+    }
 }
 
 # -- 3. OpenVPN profile ---------------------------------------------------------
 Write-Step "Installing OpenVPN profile"
-if (-not (Test-Path $OvpnSourcePath)) {
+if (-not $installVpn) {
+    Write-Skip "Skipped - you opted out of OpenVPN for this PC."
+    Write-Skip "The node still registers and works for local/LAN chat routing without it."
+} elseif (-not (Test-Path $OvpnSourcePath)) {
     Write-Host "    WARNING: node.ovpn not found next to this script - skipping VPN setup." -ForegroundColor Yellow
     Write-Host "    The node will still register, but won't have a VPN tunnel until you add the profile and re-run this script." -ForegroundColor Yellow
 } else {
