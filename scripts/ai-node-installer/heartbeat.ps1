@@ -11,27 +11,33 @@ $ErrorActionPreference = "Stop"
 $NodeConfigPath = "C:\ProgramData\FitzNetNode\node.json"
 
 if (-not (Test-Path $NodeConfigPath)) {
-    Write-Error "No node.json found at $NodeConfigPath — has this machine been registered? Run install-ai-node.ps1 first."
+    Write-Error "No node.json found at $NodeConfigPath - has this machine been registered? Run install-ai-node.ps1 first."
     exit 1
 }
 
 $config = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
 
+# Talk to Ollama's local HTTP API rather than shelling out to the ollama.exe
+# CLI: this task runs as SYSTEM (so it works with nobody logged in), and
+# Ollama's Windows installer only adds itself to the *current user's* PATH,
+# not machine-wide - so `& ollama ...` silently fails to resolve here even
+# though the Ollama server itself is still reachable over localhost.
 $models = @()
 try {
-    $models = (& ollama list | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\s+')[0] }) | Where-Object { $_ }
+    $tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5 -ErrorAction Stop
+    $models = @($tags.models | ForEach-Object { $_.name })
 } catch {
     $models = @()
 }
 
 $status = "ONLINE"
 try {
-    $ollamaPs = & ollama ps 2>$null
-    if ($ollamaPs -and ($ollamaPs | Select-Object -Skip 1)) {
+    $running = Invoke-RestMethod -Uri "http://localhost:11434/api/ps" -Method Get -TimeoutSec 5 -ErrorAction Stop
+    if ($running.models -and $running.models.Count -gt 0) {
         $status = "BUSY"
     }
 } catch {
-    # ollama not reachable locally; still report ONLINE since the node itself is up
+    # Ollama not reachable locally; still report ONLINE since the node itself is up
 }
 
 $body = @{

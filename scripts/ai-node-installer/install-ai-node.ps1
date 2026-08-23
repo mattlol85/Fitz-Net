@@ -54,7 +54,7 @@ function Write-Skip($message) {
     Write-Host "    $message" -ForegroundColor DarkGray
 }
 
-# ── 0. Prompt for token if not supplied ─────────────────────────────────────
+# -- 0. Prompt for token if not supplied --------------------------------------
 if (-not $Token) {
     $Token = Read-Host "Enter the enrollment token given to you"
 }
@@ -64,7 +64,7 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
-# ── 1. Ollama ────────────────────────────────────────────────────────────────
+# -- 1. Ollama ------------------------------------------------------------------
 Write-Step "Checking for Ollama"
 if (Get-Command ollama -ErrorAction SilentlyContinue) {
     Write-Skip "Ollama already installed."
@@ -74,7 +74,7 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
     Write-Success "Ollama installed."
 }
 
-# ── 2. OpenVPN client ────────────────────────────────────────────────────────
+# -- 2. OpenVPN client ------------------------------------------------------------
 Write-Step "Checking for OpenVPN client"
 $openVpnInstalled = Test-Path "C:\Program Files\OpenVPN\bin\openvpn.exe"
 if ($openVpnInstalled) {
@@ -85,10 +85,10 @@ if ($openVpnInstalled) {
     Write-Success "OpenVPN client installed."
 }
 
-# ── 3. OpenVPN profile (auto-start service, no GUI needed) ─────────────────
+# -- 3. OpenVPN profile (auto-start service, no GUI needed) -----------------
 Write-Step "Installing OpenVPN profile"
 if (-not (Test-Path $OvpnSourcePath)) {
-    Write-Host "    WARNING: node.ovpn not found next to this script — skipping VPN setup." -ForegroundColor Yellow
+    Write-Host "    WARNING: node.ovpn not found next to this script - skipping VPN setup." -ForegroundColor Yellow
     Write-Host "    The node will still register, but won't have a VPN tunnel until you add the profile and re-run this script." -ForegroundColor Yellow
 } else {
     New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
@@ -106,11 +106,11 @@ if (-not (Test-Path $OvpnSourcePath)) {
         }
         Write-Success "OpenVPN service is running and set to start automatically."
     } else {
-        Write-Host "    WARNING: OpenVPNService not found — you may need to reboot or start it manually from the OpenVPN GUI." -ForegroundColor Yellow
+        Write-Host "    WARNING: OpenVPNService not found - you may need to reboot or start it manually from the OpenVPN GUI." -ForegroundColor Yellow
     }
 }
 
-# ── 4. Best-effort GPU detection ────────────────────────────────────────────
+# -- 4. Best-effort GPU detection --------------------------------------------
 Write-Step "Detecting GPU"
 $vramGb = $null
 $nvidiaSmi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
@@ -126,20 +126,21 @@ if ($nvidiaSmi) {
     Write-Skip "nvidia-smi not found; continuing without GPU info."
 }
 
-# ── 5. Register the node ────────────────────────────────────────────────────
+# -- 5. Register the node ------------------------------------------------------
 Write-Step "Registering node with fitz-net-api"
 if (Test-Path $NodeConfigPath) {
-    Write-Skip "node.json already exists at $NodeConfigPath — skipping registration."
+    Write-Skip "node.json already exists at $NodeConfigPath - skipping registration."
     Write-Skip "Delete that file and re-run this script if you need to re-register."
 } else {
+    # Query Ollama's local HTTP API rather than shelling out to ollama.exe -
+    # see the matching note in heartbeat.ps1 for why (PATH isn't reliable
+    # for every context this can run in).
     $installedModels = @()
-    $ollamaCmd = Get-Command ollama -ErrorAction SilentlyContinue
-    if ($ollamaCmd) {
-        try {
-            $installedModels = (& ollama list | Select-Object -Skip 1 | ForEach-Object { ($_ -split '\s+')[0] }) | Where-Object { $_ }
-        } catch {
-            $installedModels = @()
-        }
+    try {
+        $tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5 -ErrorAction Stop
+        $installedModels = @($tags.models | ForEach-Object { $_.name })
+    } catch {
+        $installedModels = @()
     }
 
     $body = @{
@@ -163,7 +164,7 @@ if (Test-Path $NodeConfigPath) {
     Write-Success "Registered as node '$NodeName' (id: $($response.nodeId))."
 }
 
-# ── 6. Heartbeat script + scheduled task ────────────────────────────────────
+# -- 6. Heartbeat script + scheduled task --------------------------------------
 Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
 
@@ -172,11 +173,14 @@ if ($existingTask) {
     Write-Skip "Scheduled task '$HeartbeatTaskName' already exists."
 } else {
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$HeartbeatScriptPath`""
-    $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration ([TimeSpan]::MaxValue)
+    # NOTE: [TimeSpan]::MaxValue (~29,247 years) serializes to an ISO-8601
+    # duration Task Scheduler's XML schema rejects ("out of range"). 10 years
+    # is effectively "forever" for this purpose and stays within range.
+    $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 3650)
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
-    Register-ScheduledTask -TaskName $HeartbeatTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    Register-ScheduledTask -TaskName $HeartbeatTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -ErrorAction Stop | Out-Null
     Write-Success "Scheduled task '$HeartbeatTaskName' created (runs every 2 minutes)."
 }
 
