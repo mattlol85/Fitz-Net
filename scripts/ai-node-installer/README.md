@@ -20,7 +20,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
    - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
-3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `heartbeat.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`).
+3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller means the node owner has a clean way to remove everything later without re-downloading anything.
 
 4. **Send the zip to the node owner**, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
 
@@ -34,9 +34,14 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
 That's it — Ollama is installed if missing, and a scheduled task heartbeats the node every 2 minutes. The script also opens Ollama up to the local network (sets `OLLAMA_HOST=0.0.0.0`, adds a Windows Firewall rule scoped to the Private network profile only) so `fitz-net-api` can actually route chat prompts to it — this part always happens regardless of the VPN choice. The script is safe to re-run if anything needs retrying.
 
+## Removing a node
+
+Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregisters the node from `fitz-net-api` (so it stops showing up on the Status page), removes the heartbeat scheduled task and `C:\ProgramData\FitzNetNode\`, reverts `OLLAMA_HOST` and removes the firewall rule opened for it, and removes any Fitz-Net OpenVPN profile files. It does **not** uninstall Ollama or the OpenVPN client themselves — only the Fitz-Net-specific configuration this installer added. Safe to re-run.
+
 ## Files
 
 - `install-ai-node.ps1` — the main installer, run once by the node owner.
+- `uninstall-ai-node.ps1` — cleanly removes everything the installer set up (see "Removing a node" above).
 - `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates.
 - `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. Naming matches `install-ai-node.ps1`'s `-OvpnSourcePath` default (`node.ovpn`, same folder); pass `-OvpnSourcePath` explicitly if you use a different name.
 
