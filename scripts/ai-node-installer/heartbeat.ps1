@@ -9,11 +9,19 @@ param()
 $ErrorActionPreference = "Stop"
 
 $NodeConfigPath = "C:\ProgramData\FitzNetNode\node.json"
+$NetworkHelperPath = Join-Path $PSScriptRoot "node-network.ps1"
 
 if (-not (Test-Path $NodeConfigPath)) {
     Write-Error "No node.json found at $NodeConfigPath - has this machine been registered? Run install-ai-node.ps1 first."
     exit 1
 }
+
+if (-not (Test-Path $NetworkHelperPath)) {
+    Write-Error "No network helper found at $NetworkHelperPath - re-run install-ai-node.ps1 to repair this installation."
+    exit 1
+}
+
+. $NetworkHelperPath
 
 $config = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
 
@@ -23,52 +31,29 @@ $config = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
 # not machine-wide - so `& ollama ...` silently fails to resolve here even
 # though the Ollama server itself is still reachable over localhost.
 $models = @()
+$ollamaAvailable = $false
 try {
     $tags = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 5 -ErrorAction Stop
     $models = @($tags.models | ForEach-Object { $_.name })
+    $ollamaAvailable = $true
 } catch {
     $models = @()
 }
 
-# No BUSY detection: Ollama's /api/ps lists models currently loaded into
-# memory, not ones actively generating a response - a model stays "loaded"
-# for several minutes after each use (its keep-alive window) even while
-# completely idle, so that endpoint can't actually tell "busy" from "warm
-# and idle". Rather than report a wrong status, just report ONLINE.
-$status = "ONLINE"
+# The installed routing mode is deliberate. In particular, VPN mode must not
+# fall back to a same-looking 192.168.x.x LAN address that the API cannot route
+# to when the tunnel is down. Empty string intentionally clears any stale
+# address already stored by fitz-net-api; JSON null would leave it unchanged.
+$addressMode = if ($config.addressMode) { [string]$config.addressMode } else { "lan" }
+$fixedAddress = if ($config.ollamaAddress) { [string]$config.ollamaAddress } else { "" }
+$address = Get-OllamaAddress -AddressMode $addressMode -FixedAddress $fixedAddress
 
-# Re-detect the address each cycle in case DHCP handed out a new lease, the
-# VPN (re)connected since the last cycle, etc. Prefer the VPN address - it's
-# the only one reachable from fitz-net-api for a node that isn't on the same
-# LAN as it - falling back to the LAN address for a node that is.
-$vpnCandidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-    Where-Object {
-        $_.IPAddress -ne "127.0.0.1" -and
-        $_.IPAddress -notlike "169.254.*" -and
-        $_.InterfaceAlias -match "OpenVPN|TAP"
-    } |
-    Select-Object -First 1
-
-if ($vpnCandidate) {
-    # Windows can silently reclassify a VPN adapter back to "Public" after a
-    # reconnect or reboot, which would make the firewall rule (scoped to
-    # Private) stop applying to it. Self-heal this every cycle rather than
-    # letting it break again unnoticed.
-    $vpnProfile = Get-NetConnectionProfile -InterfaceIndex $vpnCandidate.InterfaceIndex -ErrorAction SilentlyContinue
-    if ($vpnProfile -and $vpnProfile.NetworkCategory -ne "Private") {
-        Set-NetConnectionProfile -InterfaceIndex $vpnCandidate.InterfaceIndex -NetworkCategory Private -ErrorAction SilentlyContinue
-    }
-    $address = "$($vpnCandidate.IPAddress):11434"
-} else {
-    $lanCandidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.IPAddress -ne "127.0.0.1" -and
-            $_.IPAddress -notlike "169.254.*" -and
-            $_.InterfaceAlias -notmatch "Loopback|OpenVPN|TAP|vEthernet"
-        } |
-        Select-Object -First 1
-    $address = if ($lanCandidate) { "$($lanCandidate.IPAddress):11434" } else { $null }
-}
+# ONLINE means the node can currently serve a chat, not merely that this task
+# can reach the public heartbeat endpoint. Ollama must answer, expose a model,
+# and have an address for the configured route.
+$heartbeatState = Get-NodeHeartbeatState -OllamaAvailable $ollamaAvailable -Models $models -Address $address
+$status = $heartbeatState.Status
+$address = $heartbeatState.Address
 
 $body = @{
     status  = $status

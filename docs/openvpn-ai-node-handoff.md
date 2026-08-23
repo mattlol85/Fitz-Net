@@ -8,7 +8,7 @@ Fitz-Net's AI-node installer (`Fitz-Net/scripts/ai-node-installer/`) bundles a p
 
 ## Primary path: the GitHub Actions workflow
 
-`Fitz-Net`'s `.github/workflows/generate-ai-node-package.yml` automates everything below (§1–2) end to end: trigger it with a node name, it SSHes to this Pi using a dedicated, restricted key, runs `onboard-ai-node.sh` here, and hands you back a ready-to-send zip (`install-ai-node.ps1` + `heartbeat.ps1` + the generated `.ovpn`) as a workflow artifact — no manual SSH/scp on your end at all.
+`Fitz-Net`'s `.github/workflows/generate-ai-node-package.yml` automates everything below (§1–2) end to end: trigger it with a node name, it SSHes to this Pi using a dedicated, restricted key, runs `onboard-ai-node.sh` here, and hands you back a ready-to-send zip (installer, uninstaller, heartbeat, shared network helper, and the generated `.ovpn`) as a workflow artifact — no manual SSH/scp on your end at all.
 
 Getting that automation working requires a **one-time setup on this Pi**, since GitHub can't SSH in without a key you've explicitly authorized, and that key is deliberately restricted to doing only this one thing (see "Why a restricted key" below):
 
@@ -140,4 +140,4 @@ This is three separate pieces, all needed together — missing any one of them l
 ```bash
 curl http://<remote-node's-VPN-IP>:11434/api/tags
 ```
-If that works, the network layer is solid and any remaining issue is elsewhere (e.g. the node's Windows Firewall/network-profile — `install-ai-node.ps1`/`heartbeat.ps1` already handle forcing the VPN adapter to the "Private" network category, since Windows classifies new VPN adapters as "Public" by default and the firewall rule opening `11434` is deliberately scoped to Private).
+If that works, the network layer is solid and any remaining issue is elsewhere. The installer scopes its port-11434 firewall rule directly to the OpenVPN adapter, so it remains effective without changing the adapter's Windows Public/Private category.
