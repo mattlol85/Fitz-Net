@@ -28,9 +28,10 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
 1. Unzip the package anywhere.
 2. Right-click `install-ai-node.ps1` → **Run with PowerShell** (as Administrator — the script requires it). If prompted, paste in the enrollment token you sent them.
-3. Wait for "This machine is now registered as a Fitz-Net AI node."
+3. It'll ask whether the VPN should connect automatically on every boot — "yes" if they're fine with it always being on in the background, "no" if they'd rather start it manually from the OpenVPN GUI when they want it active.
+4. Wait for "This machine is now registered as a Fitz-Net AI node."
 
-That's it — Ollama and the OpenVPN client are installed if missing, the VPN profile auto-connects as a background service, and a scheduled task heartbeats the node every 2 minutes. The script is safe to re-run if anything needs retrying.
+That's it — Ollama and the OpenVPN client are installed if missing, and a scheduled task heartbeats the node every 2 minutes. The script also opens Ollama up to the local network (sets `OLLAMA_HOST=0.0.0.0`, adds a Windows Firewall rule scoped to the Private network profile only) so `fitz-net-api` can actually route chat prompts to it. The script is safe to re-run if anything needs retrying.
 
 ## Files
 

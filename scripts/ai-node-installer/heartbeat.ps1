@@ -40,9 +40,23 @@ try {
     # Ollama not reachable locally; still report ONLINE since the node itself is up
 }
 
+# Re-detect the LAN address each cycle in case DHCP handed out a new lease.
+$address = $null
+$lanCandidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.IPAddress -ne "127.0.0.1" -and
+        $_.IPAddress -notlike "169.254.*" -and
+        $_.InterfaceAlias -notmatch "Loopback|OpenVPN|TAP|vEthernet"
+    } |
+    Select-Object -First 1
+if ($lanCandidate) {
+    $address = "$($lanCandidate.IPAddress):11434"
+}
+
 $body = @{
-    status = $status
-    models = @($models)
+    status  = $status
+    models  = @($models)
+    address = $address
 } | ConvertTo-Json
 
 try {
