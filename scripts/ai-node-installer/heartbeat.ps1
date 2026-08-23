@@ -30,15 +30,12 @@ try {
     $models = @()
 }
 
+# No BUSY detection: Ollama's /api/ps lists models currently loaded into
+# memory, not ones actively generating a response - a model stays "loaded"
+# for several minutes after each use (its keep-alive window) even while
+# completely idle, so that endpoint can't actually tell "busy" from "warm
+# and idle". Rather than report a wrong status, just report ONLINE.
 $status = "ONLINE"
-try {
-    $running = Invoke-RestMethod -Uri "http://localhost:11434/api/ps" -Method Get -TimeoutSec 5 -ErrorAction Stop
-    if ($running.models -and $running.models.Count -gt 0) {
-        $status = "BUSY"
-    }
-} catch {
-    # Ollama not reachable locally; still report ONLINE since the node itself is up
-}
 
 # Re-detect the LAN address each cycle in case DHCP handed out a new lease.
 $address = $null
