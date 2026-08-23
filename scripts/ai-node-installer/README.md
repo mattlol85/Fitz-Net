@@ -4,8 +4,9 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
 ## What you do (once per new node)
 
-1. **Generate an enrollment token.** While logged in on the website (so you have a valid JWT), call:
+1. **Generate an enrollment token.** Log into the website, go to the Status tab, and use the "Enroll a new AI node" panel next to the AI Worker Nodes graph — enter an optional label and click Generate. It shows the token and its expiry with a one-click copy button.
 
+   Fallback (if the website's unavailable): call the endpoint directly with a JWT copied out of browser dev tools:
    ```bash
    curl -X POST https://api.fitznet.doomdns.org/node/enrollment-token \
      -H "Authorization: Bearer <your JWT>" \
@@ -13,7 +14,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
      -d '{"label": "brother-pc"}'
    ```
 
-   This returns `{"token": "...", "expiresAt": "..."}`. The token is valid for 30 minutes and can only be used once.
+   Either way you get back `{"token": "...", "expiresAt": "..."}`. The token is valid for 30 minutes and can only be used once.
 
 2. **Get a client `.ovpn` profile.** Two ways:
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
