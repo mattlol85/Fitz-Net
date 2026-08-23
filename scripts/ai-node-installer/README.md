@@ -28,7 +28,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
 1. Unzip the package anywhere.
 2. Right-click `install-ai-node.ps1` → **Run with PowerShell** (as Administrator — the script requires it). If prompted, paste in the enrollment token you sent them.
-3. It'll ask whether to install/connect OpenVPN on this PC at all — "no" skips OpenVPN entirely (nothing gets installed or configured), and the node still registers and works for local/LAN chat routing either way. The VPN is groundwork for a later phase (reaching a node that's off the LAN), so it's fine to decline if they'd rather not have a VPN on their PC.
+3. It'll ask whether to install/connect OpenVPN on this PC at all — say **yes** if this node isn't on your own home LAN (e.g. a family member's PC elsewhere), since the VPN is the only way `fitz-net-api` can reach it to route chat prompts. If the node *is* on your LAN, "no" is fine — it still registers and works for local chat routing without it.
 4. If they said yes, it'll also ask whether the VPN should connect automatically on every boot — "yes" if they're fine with it always being on in the background, "no" if they'd rather start it manually from the OpenVPN GUI when they want it active.
 5. Wait for "This machine is now registered as a Fitz-Net AI node."
 
@@ -49,4 +49,4 @@ Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregister
 
 Covered in full in [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) — use this only if you're not using the GitHub Actions workflow from step 2.
 
-Note: node registration and heartbeats talk to `fitz-net-api` over its existing public HTTPS endpoint, not over this VPN — the tunnel isn't required for phase 1 to work. It's laying the groundwork for later phases, when the orchestrator needs to reach the node's Ollama port privately. When that's needed, revisit whether the VPN server allows client-to-client traffic or needs a route to the Docker host's subnet.
+Note: node registration and heartbeats talk to `fitz-net-api` over its existing public HTTPS endpoint, not over this VPN. The VPN is what makes a **remote** node's chat requests routable — see [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md)'s §5 for the (one-time, per OpenVPN server) routing setup this requires on the OpenVPN server and the Docker host.

@@ -4,7 +4,7 @@ This is the runbook for the Raspberry Pi (or whatever box) running your OpenVPN 
 
 ## Why
 
-Fitz-Net's AI-node installer (`Fitz-Net/scripts/ai-node-installer/`) bundles a per-node OpenVPN client profile so the node connects to your network automatically as a background service — no manual VPN setup on the node owner's end. Node **registration and heartbeats** go over `fitz-net-api`'s existing public HTTPS endpoint, not this VPN, so this step isn't blocking day one — it's laying the groundwork for later phases, when the orchestrator needs to reach a node's Ollama port privately.
+Fitz-Net's AI-node installer (`Fitz-Net/scripts/ai-node-installer/`) bundles a per-node OpenVPN client profile so the node connects to your network automatically as a background service — no manual VPN setup on the node owner's end. Node **registration and heartbeats** go over `fitz-net-api`'s existing public HTTPS endpoint, not this VPN. The VPN is what makes a **remote** node's chat requests actually routable — see §5 for the server-side routing setup that requires.
 
 ## Primary path: the GitHub Actions workflow
 
@@ -102,15 +102,42 @@ Then reload/restart the OpenVPN server so it picks up the updated CRL (`systemct
 This is a property of your base client template (`CLIENT_TEMPLATE` / PiVPN's `client-common.txt`), not something either the script or the installer decides:
 
 - **Full tunnel**: if the template has `redirect-gateway def1 bypass-dhcp` (or similar), the node's *entire* internet connection routes through your home network once connected — all its normal browsing/streaming/etc, not just traffic meant for you. Almost certainly not what you want for an AI node.
-- **Split tunnel** (what you want): the template instead pushes a route just for your private subnet (`push "route 192.168.1.0 255.255.255.0"`, adjusted to your actual LAN/VPN subnet) with no `redirect-gateway`. Only traffic bound for your network goes through the tunnel; the node's own internet traffic is unaffected.
+- **Split tunnel** (what you want): the template instead pushes a route just for what the node actually needs to reach — see §5 below for the specific narrow route, rather than your whole LAN — with no `redirect-gateway`. Only that traffic goes through the tunnel; the node's own internet traffic is unaffected.
 
 Check for `redirect-gateway` in the template before generating a node's profile, and remove it (or keep a separate, narrower template just for AI nodes) if present. Also check the template isn't pushing DNS servers (`dhcp-option DNS ...`) unless you actually want the node's DNS lookups going through your network too.
 
-## When you're ready for private node-to-orchestrator traffic (later phase, not needed yet)
+## 5. Private node-to-orchestrator traffic (routing a remote node's chat requests)
 
-Registration/heartbeat traffic doesn't need this VPN. When a later phase has the orchestrator (the Proxmox Docker host) dialing into a node's Ollama port (`11434`) directly, you'll need one of:
+Registration/heartbeat traffic doesn't need this VPN — it goes over `fitz-net-api`'s public HTTPS endpoint regardless. This section is specifically for the orchestrator (the Proxmox Docker host, `192.168.1.59`, running `fitz-net-api`) being able to reach a **remote** node's Ollama port (`11434`) over the VPN to route a chat request — needed for any node that isn't on your home LAN (e.g. a family member's PC elsewhere).
 
-- **Client-to-client traffic enabled** on the OpenVPN server (`client-to-client` in `server.conf`) if the Docker host is *also* a VPN client, or
-- **A route pushed to VPN clients** for the Docker host's LAN subnet (`push "route 192.168.1.0 255.255.255.0"`) plus a corresponding route/NAT rule on the Docker host's side, if the Docker host is reached via the LAN rather than as a VPN peer itself.
+This is three separate pieces, all needed together — missing any one of them looks like the same generic connection failure, so do all three:
 
-Revisit this when that phase actually starts — no action needed now.
+**On this Pi:**
+
+1. **Enable IP forwarding** so the Pi actually forwards packets between the VPN tunnel and your LAN:
+   ```bash
+   sudo sysctl -w net.ipv4.ip_forward=1
+   echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+   ```
+
+2. **Push a narrow route to VPN clients** — just to the Docker host, not your whole LAN (least-privilege: a remote node only needs to reach the one machine it's actually talking to). Add to your server config (`server.conf`, or PiVPN's equivalent):
+   ```
+   push "route 192.168.1.59 255.255.255.255"
+   ```
+   Restart the OpenVPN server after (`sudo systemctl restart openvpn@server` or equivalent). This is what makes the *return* path work — without it, the node has no idea how to reply to the Docker host.
+
+3. **Note the VPN subnet** this server hands out — look for a line like `server 10.8.0.0 255.255.255.0` in the same config. You'll need this exact subnet for the next step.
+
+**On the Docker host** (`192.168.1.59`, the Ubuntu VM running `fitz-net-api`):
+
+4. **Add a static route into the VPN subnet**, via this Pi as next-hop, so the *outbound* direction (Docker host → remote node) works:
+   ```bash
+   sudo ip route add <vpn-subnet-from-step-3> via <this-pi's-LAN-IP>
+   ```
+   Persist it (e.g. via netplan on Ubuntu) so it survives a reboot — an `ip route add` alone is lost on restart. `fitz-net-api` runs in Docker on this host; outbound container connections go through the host's routing table via the normal Docker NAT path, so this host-level route is sufficient on its own — no container-specific networking change needed.
+
+**Verify before testing through the app** — from the Docker host itself:
+```bash
+curl http://<remote-node's-VPN-IP>:11434/api/tags
+```
+If that works, the network layer is solid and any remaining issue is elsewhere (e.g. the node's Windows Firewall/network-profile — `install-ai-node.ps1`/`heartbeat.ps1` already handle forcing the VPN adapter to the "Private" network category, since Windows classifies new VPN adapters as "Public" by default and the firewall rule opening `11434` is deliberately scoped to Private).

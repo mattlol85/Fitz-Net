@@ -92,6 +92,34 @@ function Get-LanIPv4Address {
     return $null
 }
 
+function Get-VpnIPv4Address {
+    $candidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.IPAddress -notlike "169.254.*" -and
+            $_.InterfaceAlias -match "OpenVPN|TAP"
+        } |
+        Select-Object -First 1
+    if ($candidate) { return $candidate.IPAddress }
+    return $null
+}
+
+function Set-VpnAdapterPrivate {
+    # Windows classifies a new VPN/TAP adapter as "Public" by default, which
+    # means the firewall rule opening 11434 (deliberately scoped to Private,
+    # not Public) silently doesn't apply to traffic arriving over it. Force
+    # it to Private so remote nodes over the VPN are actually reachable.
+    $vpnInterface = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.InterfaceAlias -match "OpenVPN|TAP" } |
+        Select-Object -First 1
+    if (-not $vpnInterface) { return }
+
+    $profile = Get-NetConnectionProfile -InterfaceIndex $vpnInterface.InterfaceIndex -ErrorAction SilentlyContinue
+    if ($profile -and $profile.NetworkCategory -ne "Private") {
+        Set-NetConnectionProfile -InterfaceIndex $vpnInterface.InterfaceIndex -NetworkCategory Private -ErrorAction SilentlyContinue
+    }
+}
+
 # -- 0. Prompt for token if not supplied --------------------------------------
 if (-not $Token) {
     $Token = Read-Host "Enter the enrollment token given to you"
@@ -161,6 +189,21 @@ if (-not $installVpn) {
                 Restart-Service -Name "OpenVPNService"
             }
             Write-Success "OpenVPN service is running and set to start automatically."
+
+            # Give the tunnel a few seconds to actually come up, then fix the
+            # network category before anything downstream (the firewall rule,
+            # address detection) depends on it.
+            $vpnUp = $false
+            for ($i = 0; $i -lt 5; $i++) {
+                Start-Sleep -Seconds 2
+                if (Get-VpnIPv4Address) { $vpnUp = $true; break }
+            }
+            if ($vpnUp) {
+                Set-VpnAdapterPrivate
+                Write-Success "VPN tunnel is up; set its network category to Private."
+            } else {
+                Write-Host "    WARNING: VPN tunnel didn't come up within 10 seconds - it may still connect shortly on its own; heartbeat.ps1 will pick up its address once it does." -ForegroundColor Yellow
+            }
         } else {
             Write-Host "    WARNING: OpenVPNService not found - you may need to reboot or start it manually from the OpenVPN GUI." -ForegroundColor Yellow
         }
@@ -229,12 +272,19 @@ if ($existingRule) {
 if ($OllamaAddress) {
     Write-Skip "Using provided -OllamaAddress: $OllamaAddress"
 } else {
+    # Prefer the VPN address: it's the only one that's reachable from
+    # fitz-net-api for a node that isn't on the same LAN as it. Falls back
+    # to the LAN address for a node that is (e.g. Matt-Pc, no VPN needed).
+    $vpnIp = Get-VpnIPv4Address
     $lanIp = Get-LanIPv4Address
-    if ($lanIp) {
+    if ($vpnIp) {
+        $OllamaAddress = "${vpnIp}:11434"
+        Write-Success "Detected VPN address: $OllamaAddress"
+    } elseif ($lanIp) {
         $OllamaAddress = "${lanIp}:11434"
         Write-Success "Detected LAN address: $OllamaAddress"
     } else {
-        Write-Host "    WARNING: could not auto-detect a LAN IPv4 address - fitz-net-api won't be able to reach this node's Ollama until you re-run with -OllamaAddress." -ForegroundColor Yellow
+        Write-Host "    WARNING: could not auto-detect an IPv4 address - fitz-net-api won't be able to reach this node's Ollama until you re-run with -OllamaAddress." -ForegroundColor Yellow
     }
 }
 

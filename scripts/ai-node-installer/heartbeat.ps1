@@ -37,17 +37,37 @@ try {
 # and idle". Rather than report a wrong status, just report ONLINE.
 $status = "ONLINE"
 
-# Re-detect the LAN address each cycle in case DHCP handed out a new lease.
-$address = $null
-$lanCandidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+# Re-detect the address each cycle in case DHCP handed out a new lease, the
+# VPN (re)connected since the last cycle, etc. Prefer the VPN address - it's
+# the only one reachable from fitz-net-api for a node that isn't on the same
+# LAN as it - falling back to the LAN address for a node that is.
+$vpnCandidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
     Where-Object {
         $_.IPAddress -ne "127.0.0.1" -and
         $_.IPAddress -notlike "169.254.*" -and
-        $_.InterfaceAlias -notmatch "Loopback|OpenVPN|TAP|vEthernet"
+        $_.InterfaceAlias -match "OpenVPN|TAP"
     } |
     Select-Object -First 1
-if ($lanCandidate) {
-    $address = "$($lanCandidate.IPAddress):11434"
+
+if ($vpnCandidate) {
+    # Windows can silently reclassify a VPN adapter back to "Public" after a
+    # reconnect or reboot, which would make the firewall rule (scoped to
+    # Private) stop applying to it. Self-heal this every cycle rather than
+    # letting it break again unnoticed.
+    $vpnProfile = Get-NetConnectionProfile -InterfaceIndex $vpnCandidate.InterfaceIndex -ErrorAction SilentlyContinue
+    if ($vpnProfile -and $vpnProfile.NetworkCategory -ne "Private") {
+        Set-NetConnectionProfile -InterfaceIndex $vpnCandidate.InterfaceIndex -NetworkCategory Private -ErrorAction SilentlyContinue
+    }
+    $address = "$($vpnCandidate.IPAddress):11434"
+} else {
+    $lanCandidate = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.IPAddress -notlike "169.254.*" -and
+            $_.InterfaceAlias -notmatch "Loopback|OpenVPN|TAP|vEthernet"
+        } |
+        Select-Object -First 1
+    $address = if ($lanCandidate) { "$($lanCandidate.IPAddress):11434" } else { $null }
 }
 
 $body = @{
