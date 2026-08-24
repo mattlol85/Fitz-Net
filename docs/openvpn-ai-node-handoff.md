@@ -130,11 +130,12 @@ This is three separate pieces, all needed together — missing any one of them l
 
 **On the Docker host** (`192.168.1.59`, the Ubuntu VM running `fitz-net-api`):
 
-4. **Add a static route into the VPN subnet**, via this Pi as next-hop, so the *outbound* direction (Docker host → remote node) works:
+4. **Add a persistent route into the VPN subnet**, via this Pi as next-hop, so the *outbound* direction (Docker host → remote node) works. The repository helper applies it immediately, persists it with systemd, and can verify a connected node in the same command:
    ```bash
-   sudo ip route add <vpn-subnet-from-step-3> via <this-pi's-LAN-IP>
+   sudo /opt/fitznet/scripts/configure-ai-node-vpn-route.sh \
+     <vpn-subnet-from-step-3> <this-pi's-LAN-IP> [connected-node-vpn-ip]
    ```
-   Persist it (e.g. via netplan on Ubuntu) so it survives a reboot — an `ip route add` alone is lost on restart. `fitz-net-api` runs in Docker on this host; outbound container connections go through the host's routing table via the normal Docker NAT path, so this host-level route is sufficient on its own — no container-specific networking change needed.
+   Copy `scripts/proxmox/configure-ai-node-vpn-route.sh` to that location first. `fitz-net-api` runs in Docker on this host; outbound container connections go through the host's routing table via the normal Docker NAT path, so this host-level route is sufficient on its own — no container-specific networking change needed.
 
 **Verify before testing through the app** — from the Docker host itself:
 ```bash

@@ -131,11 +131,42 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 # -- 1. Ollama ------------------------------------------------------------------
 Write-Step "Checking for Ollama"
-if (Get-Command ollama -ErrorAction SilentlyContinue) {
+$ollamaExecutable = $null
+$ollamaCandidates = @(
+    (Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"),
+    (Join-Path $env:LOCALAPPDATA "Ollama\ollama.exe"),
+    (Join-Path $env:ProgramFiles "Ollama\ollama.exe")
+)
+$runningOllama = Get-Process -Name "ollama" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($runningOllama -and $runningOllama.Path) {
+    $ollamaExecutable = $runningOllama.Path
+}
+
+$ollamaCommand = Get-Command ollama.exe -ErrorAction SilentlyContinue
+if (-not $ollamaExecutable -and $ollamaCommand) {
+    $ollamaExecutable = $ollamaCommand.Source
+}
+if (-not $ollamaExecutable) {
+    $ollamaExecutable = $ollamaCandidates |
+        Where-Object { Test-Path -LiteralPath $_ } |
+        Select-Object -First 1
+}
+
+if ($ollamaExecutable) {
     Write-Skip "Ollama already installed."
 } else {
     Write-Host "    Installing Ollama via winget..."
     winget install --id Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        throw "winget could not install Ollama (exit code $LASTEXITCODE)."
+    }
+
+    $ollamaExecutable = $ollamaCandidates |
+        Where-Object { Test-Path -LiteralPath $_ } |
+        Select-Object -First 1
+    if (-not $ollamaExecutable) {
+        throw "Ollama was installed, but ollama.exe could not be located. Sign out and back in, then re-run this installer."
+    }
     Write-Success "Ollama installed."
 }
 
@@ -246,11 +277,18 @@ $env:OLLAMA_HOST = "0.0.0.0"
 Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Write-Success "Set OLLAMA_HOST=0.0.0.0 (machine-wide)."
 
-# Give whatever relaunches Ollama (its own tray-app supervisor, if present) a
-# few seconds, then confirm it's actually back up before moving on - the next
-# step queries this same endpoint for the installed model list.
+# Restart Ollama ourselves. Killing the tray app to apply OLLAMA_HOST and then
+# waiting for it to relaunch leaves the installer stuck on PCs where no tray
+# supervisor is running.
+Start-Sleep -Seconds 1
+try {
+    Start-Process -FilePath $ollamaExecutable -ArgumentList "serve" -WindowStyle Hidden -ErrorAction Stop
+} catch {
+    throw "Ollama could not be started automatically from '$ollamaExecutable': $($_.Exception.Message)"
+}
+
 $ollamaBackUp = $false
-for ($i = 0; $i -lt 5; $i++) {
+for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 2
     try {
         Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method Get -TimeoutSec 3 -ErrorAction Stop | Out-Null
@@ -261,9 +299,9 @@ for ($i = 0; $i -lt 5; $i++) {
     }
 }
 if ($ollamaBackUp) {
-    Write-Success "Ollama is back up and reachable."
+    Write-Success "Ollama was restarted and is reachable."
 } else {
-    Write-Host "    WARNING: Ollama didn't come back up on its own - open it from the Start Menu, or sign out/in or reboot once, then re-run this script." -ForegroundColor Yellow
+    throw "Ollama did not become reachable within 30 seconds after starting '$ollamaExecutable'. Check the Ollama logs, then re-run this installer."
 }
 
 # Replace the legacy profile-only rule with a route-specific rule. VPN
