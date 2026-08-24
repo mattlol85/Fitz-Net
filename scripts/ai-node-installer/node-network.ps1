@@ -103,3 +103,40 @@ function Get-NodeHeartbeatState {
         Address = if ($chatReady) { $Address } else { "" }
     }
 }
+
+function Set-SplitTunnelProfile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProfilePath,
+
+        [string]$ApiHostAddress = "192.168.1.59"
+    )
+
+    $parsedAddress = $null
+    if (-not [System.Net.IPAddress]::TryParse($ApiHostAddress, [ref]$parsedAddress) -or
+        $parsedAddress.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        throw "ApiHostAddress must be a valid IPv4 address."
+    }
+
+    $lines = [System.IO.File]::ReadAllLines($ProfilePath)
+    $managedComment = "# Fitz-Net managed split tunnel"
+    $apiRoutePattern = "^\s*route\s+$([regex]::Escape($ApiHostAddress))\s+255\.255\.255\.255(?:\s|$)"
+    $filteredLines = @($lines | Where-Object {
+        $_ -notmatch '^\s*# Fitz-Net managed split tunnel\s*$' -and
+        $_ -notmatch '^\s*route-nopull(?:\s|$)' -and
+        $_ -notmatch '^\s*redirect-gateway(?:\s|$)' -and
+        $_ -notmatch $apiRoutePattern
+    })
+
+    $updatedLines = @(
+        $managedComment
+        "route-nopull"
+        "route $ApiHostAddress 255.255.255.255"
+    ) + $filteredLines
+
+    [System.IO.File]::WriteAllLines(
+        $ProfilePath,
+        $updatedLines,
+        (New-Object System.Text.UTF8Encoding($false))
+    )
+}

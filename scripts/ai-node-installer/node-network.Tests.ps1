@@ -82,3 +82,33 @@ Describe "Fitz-Net AI node heartbeat readiness" {
         $state.Address | Should Be ""
     }
 }
+
+Describe "Fitz-Net OpenVPN split-tunnel profile" {
+    It "removes full-tunnel directives and keeps only the API host route" {
+        $profilePath = Join-Path $TestDrive "node.ovpn"
+        @(
+            "client"
+            "redirect-gateway def1"
+            "route-nopull"
+            "route 192.168.1.59 255.255.255.255"
+            "<ca>"
+            "certificate-data"
+            "</ca>"
+        ) | Set-Content -Path $profilePath -Encoding ASCII
+
+        Set-SplitTunnelProfile -ProfilePath $profilePath
+        $result = Get-Content -Path $profilePath
+
+        @($result | Where-Object { $_ -eq "route-nopull" }).Count | Should Be 1
+        @($result | Where-Object { $_ -eq "route 192.168.1.59 255.255.255.255" }).Count | Should Be 1
+        @($result | Where-Object { $_ -match "^redirect-gateway" }).Count | Should Be 0
+        @($result | Where-Object { $_ -eq "certificate-data" }).Count | Should Be 1
+    }
+
+    It "rejects a non-IPv4 API host address" {
+        $profilePath = Join-Path $TestDrive "invalid.ovpn"
+        "client" | Set-Content -Path $profilePath -Encoding ASCII
+
+        { Set-SplitTunnelProfile -ProfilePath $profilePath -ApiHostAddress "not-an-ip" } | Should Throw
+    }
+}
