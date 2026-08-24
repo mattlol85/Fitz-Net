@@ -337,7 +337,21 @@ if (Test-Path $NodeConfigPath) {
         address = $registrationAddress
     } | ConvertTo-Json
 
-    $response = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/node/register" -ContentType "application/json" -Body $body
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/node/register" `
+            -ContentType "application/json" -Body $body -ErrorAction Stop
+    } catch {
+        $statusCode = $null
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+        }
+
+        if ($statusCode -eq 401) {
+            throw "The enrollment token was rejected. Generate a new token on the Fitz-Net website and re-run the installer within 30 minutes. Enrollment tokens can only be used once."
+        }
+
+        throw
+    }
 
     $nodeConfig = @{
         nodeId     = $response.nodeId
