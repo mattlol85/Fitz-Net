@@ -338,7 +338,8 @@ $ollamaAction = New-ScheduledTaskAction -Execute "powershell.exe" `
 $ollamaTrigger = New-ScheduledTaskTrigger -AtLogOn -User $interactiveUser
 $ollamaPrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
 $ollamaSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650)
+    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650) `
+    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 $existingOllamaTask = Get-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
 if ($existingOllamaTask) {
     Stop-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
