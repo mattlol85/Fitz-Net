@@ -20,7 +20,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
    - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
-3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, `manage-ai-node-vpn.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller and VPN control script gives the node owner control without another download.
+3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, `manage-ai-node-vpn.ps1`, `start-ollama.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller and control scripts gives the node owner everything needed without another download.
 
 4. **Send the zip to the node owner**, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
 
@@ -32,7 +32,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 4. If they said yes, the safe default is for the VPN to remain **off** and not start with Windows. Press Enter at the auto-start prompt to keep this default. Typing "yes" explicitly enables an always-on background tunnel and shows a warning.
 5. Wait for "This machine is now registered as a Fitz-Net AI node."
 
-That's it — Ollama is installed if missing, restarted automatically with `OLLAMA_HOST=0.0.0.0`, and a scheduled task heartbeats the node every 2 minutes. The installer waits up to 30 seconds for Ollama's API and stops with an actionable error if it cannot start; the node owner no longer needs to open the Ollama desktop app during installation. Port 11434 is opened either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. A node reports `ONLINE` only while Ollama has a model and its selected route is usable. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.
+That's it — Ollama is installed for the signed-in model owner if missing, then restarted under that same account with `OLLAMA_HOST=0.0.0.0`. The `FitzNetOllamaServe` task starts it again whenever that owner logs on, without using the elevated administrator's empty model directory. The installer waits up to 30 seconds for Ollama's API and stops with an actionable error if it cannot start. A second scheduled task heartbeats the node every 2 minutes. Port 11434 is opened either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. A node reports `ONLINE` only while Ollama has a model and its selected route is usable. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.
 
 If VPN installation is selected, `node.ovpn` is required. The installer rewrites it as a narrow split tunnel: only traffic to the API host (`192.168.1.59`) uses OpenVPN, never the node owner's general internet traffic. A manually controlled node remains `OFFLINE` until its owner connects the VPN.
 
@@ -59,6 +59,7 @@ Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregister
 - `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates.
 - `node-network.ps1` — shared route detection used by the installer and heartbeat; it is copied beside the installed heartbeat.
 - `manage-ai-node-vpn.ps1` — explicit Connect/Disconnect/Status control for a manually managed VPN.
+- `start-ollama.ps1` — runs Ollama with remote access under the signed-in model owner's Windows account; installed as the `FitzNetOllamaServe` logon task.
 - `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. It must use this exact name and sit beside `install-ai-node.ps1`.
 
 ## Manual step: generating the `.ovpn` profile by hand

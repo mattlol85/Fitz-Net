@@ -99,7 +99,7 @@ Then reload/restart the OpenVPN server so it picks up the updated CRL (`systemct
 
 ## Split-tunnel vs. full-tunnel
 
-The AI-node installer enforces a narrow split tunnel in the installed profile with `route-nopull` plus a host route to `192.168.1.59`. This protects a node even if the OpenVPN server globally pushes `redirect-gateway` or a wider LAN route:
+The AI-node installer enforces a narrow split tunnel in the installed profile with `route-nopull` plus `route 192.168.1.59 255.255.255.255 vpn_gateway`. The explicit `vpn_gateway` is required because `route-nopull` also discards the server's pushed routing options; without it, OpenVPN can send the API-host route through the node owner's LAN gateway instead of the tunnel. This protects a node even if the OpenVPN server globally pushes `redirect-gateway` or a wider LAN route:
 
 - **Full tunnel**: if the template has `redirect-gateway def1 bypass-dhcp` (or similar), the node's *entire* internet connection routes through your home network once connected — all its normal browsing/streaming/etc, not just traffic meant for you. Almost certainly not what you want for an AI node.
 - **Split tunnel** (what the installer guarantees): only traffic bound for the Docker/API host uses the tunnel. The node owner's normal browsing, streaming, and other internet traffic continues to use their own connection.

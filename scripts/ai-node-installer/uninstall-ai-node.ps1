@@ -23,6 +23,7 @@ param()
 $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
+$OllamaTaskName = "FitzNetOllamaServe"
 $FirewallRuleNames = @(
     "Fitz-Net Ollama",
     "Fitz-Net Ollama (LAN)",
@@ -69,7 +70,18 @@ if ($existingTask) {
     Write-Skip "No scheduled task found."
 }
 
-# -- 3. Local node files ---------------------------------------------------------
+# -- 3. Ollama scheduled task ----------------------------------------------------
+Write-Step "Removing Fitz-Net Ollama task"
+$ollamaTask = Get-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
+if ($ollamaTask) {
+    Stop-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $OllamaTaskName -Confirm:$false
+    Write-Success "Removed scheduled task '$OllamaTaskName'."
+} else {
+    Write-Skip "No Fitz-Net Ollama task found."
+}
+
+# -- 4. Local node files ---------------------------------------------------------
 Write-Step "Removing local node files"
 if (Test-Path $InstallDir) {
     Remove-Item -Path $InstallDir -Recurse -Force
@@ -78,7 +90,7 @@ if (Test-Path $InstallDir) {
     Write-Skip "$InstallDir doesn't exist - nothing to remove."
 }
 
-# -- 4. OLLAMA_HOST + firewall rule ----------------------------------------------
+# -- 5. OLLAMA_HOST + firewall rule ----------------------------------------------
 Write-Step "Reverting Ollama network exposure"
 $currentValue = [Environment]::GetEnvironmentVariable("OLLAMA_HOST", "Machine")
 if ($currentValue) {
@@ -103,7 +115,7 @@ if (-not $removedRule) {
     Write-Skip "No Fitz-Net Ollama firewall rules found."
 }
 
-# -- 5. OpenVPN profile -----------------------------------------------------------
+# -- 6. OpenVPN profile -----------------------------------------------------------
 Write-Step "Removing OpenVPN profile"
 $ovpnLocations = @(
     (Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"),

@@ -100,7 +100,8 @@ Describe "Fitz-Net OpenVPN split-tunnel profile" {
         $result = Get-Content -Path $profilePath
 
         @($result | Where-Object { $_ -eq "route-nopull" }).Count | Should Be 1
-        @($result | Where-Object { $_ -eq "route 192.168.1.59 255.255.255.255" }).Count | Should Be 1
+        @($result | Where-Object { $_ -eq "route 192.168.1.59 255.255.255.255 vpn_gateway" }).Count | Should Be 1
+        @($result | Where-Object { $_ -eq "route 192.168.1.59 255.255.255.255" }).Count | Should Be 0
         @($result | Where-Object { $_ -match "^redirect-gateway" }).Count | Should Be 0
         @($result | Where-Object { $_ -eq "certificate-data" }).Count | Should Be 1
     }

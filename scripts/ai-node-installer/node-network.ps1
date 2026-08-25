@@ -131,7 +131,7 @@ function Set-SplitTunnelProfile {
     $updatedLines = @(
         $managedComment
         "route-nopull"
-        "route $ApiHostAddress 255.255.255.255"
+        "route $ApiHostAddress 255.255.255.255 vpn_gateway"
     ) + $filteredLines
 
     [System.IO.File]::WriteAllLines(

@@ -69,8 +69,11 @@ $NetworkHelperSourcePath = Join-Path $PSScriptRoot "node-network.ps1"
 $NetworkHelperInstallPath = Join-Path $InstallDir "node-network.ps1"
 $VpnManagerSourcePath = Join-Path $PSScriptRoot "manage-ai-node-vpn.ps1"
 $VpnManagerInstallPath = Join-Path $InstallDir "manage-ai-node-vpn.ps1"
+$OllamaLauncherSourcePath = Join-Path $PSScriptRoot "start-ollama.ps1"
+$OllamaLauncherInstallPath = Join-Path $InstallDir "start-ollama.ps1"
 $VpnApiHostAddress = "192.168.1.59"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
+$OllamaTaskName = "FitzNetOllamaServe"
 $LegacyFirewallRuleName = "Fitz-Net Ollama"
 $LanFirewallRuleName = "Fitz-Net Ollama (LAN)"
 $VpnFirewallRuleName = "Fitz-Net Ollama (VPN)"
@@ -91,6 +94,9 @@ function Write-Skip($message) {
 
 if (-not (Test-Path $NetworkHelperSourcePath)) {
     throw "node-network.ps1 was not found next to the installer. Re-download the complete installer package."
+}
+if (-not (Test-Path $OllamaLauncherSourcePath)) {
+    throw "start-ollama.ps1 was not found next to the installer. Re-download the complete installer package."
 }
 . $NetworkHelperSourcePath
 
@@ -131,43 +137,82 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 # -- 1. Ollama ------------------------------------------------------------------
 Write-Step "Checking for Ollama"
+$interactiveUser = (Get-CimInstance Win32_ComputerSystem).UserName
+if ([string]::IsNullOrWhiteSpace($interactiveUser)) {
+    throw "No signed-in desktop user was found. Sign in as the person who owns the Ollama models, then re-run this installer as Administrator."
+}
+
+try {
+    $interactiveSid = (New-Object System.Security.Principal.NTAccount($interactiveUser)).Translate(
+        [System.Security.Principal.SecurityIdentifier]
+    ).Value
+} catch {
+    throw "Could not resolve the signed-in user '$interactiveUser': $($_.Exception.Message)"
+}
+
+$interactiveProfile = Get-CimInstance Win32_UserProfile |
+    Where-Object { $_.SID -eq $interactiveSid } |
+    Select-Object -First 1
+if (-not $interactiveProfile -or [string]::IsNullOrWhiteSpace($interactiveProfile.LocalPath)) {
+    throw "Could not locate the Windows profile for signed-in user '$interactiveUser'."
+}
+
+$interactiveProfilePath = $interactiveProfile.LocalPath
 $ollamaExecutable = $null
 $ollamaCandidates = @(
-    (Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"),
-    (Join-Path $env:LOCALAPPDATA "Ollama\ollama.exe"),
-    (Join-Path $env:ProgramFiles "Ollama\ollama.exe")
+    (Join-Path $interactiveProfilePath "AppData\Local\Programs\Ollama\ollama.exe"),
+    (Join-Path $interactiveProfilePath "AppData\Local\Ollama\ollama.exe")
 )
-$runningOllama = Get-Process -Name "ollama" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($runningOllama -and $runningOllama.Path) {
-    $ollamaExecutable = $runningOllama.Path
-}
-
-$ollamaCommand = Get-Command ollama.exe -ErrorAction SilentlyContinue
-if (-not $ollamaExecutable -and $ollamaCommand) {
-    $ollamaExecutable = $ollamaCommand.Source
-}
-if (-not $ollamaExecutable) {
-    $ollamaExecutable = $ollamaCandidates |
-        Where-Object { Test-Path -LiteralPath $_ } |
-        Select-Object -First 1
-}
+$ollamaExecutable = $ollamaCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
 
 if ($ollamaExecutable) {
-    Write-Skip "Ollama already installed."
+    Write-Skip "Ollama already installed for $interactiveUser."
 } else {
-    Write-Host "    Installing Ollama via winget..."
-    winget install --id Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        throw "winget could not install Ollama (exit code $LASTEXITCODE)."
+    $wingetPath = Join-Path $interactiveProfilePath "AppData\Local\Microsoft\WindowsApps\winget.exe"
+    if (-not (Test-Path -LiteralPath $wingetPath -PathType Leaf)) {
+        throw "Ollama is not installed for '$interactiveUser', and that user's winget.exe could not be found. Install Ollama while signed in as that user, then re-run this installer."
+    }
+
+    Write-Host "    Installing Ollama for $interactiveUser via winget..."
+    $installTaskName = "FitzNetInstallOllama-$([guid]::NewGuid().ToString('N'))"
+    $installAction = New-ScheduledTaskAction -Execute $wingetPath -Argument "install --id Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements"
+    $installTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5)
+    $installPrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
+    $installSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+    try {
+        Register-ScheduledTask -TaskName $installTaskName -Action $installAction -Trigger $installTrigger `
+            -Principal $installPrincipal -Settings $installSettings -ErrorAction Stop | Out-Null
+        $installRequestedAt = Get-Date
+        Start-ScheduledTask -TaskName $installTaskName
+
+        $installDeadline = (Get-Date).AddMinutes(10)
+        do {
+            Start-Sleep -Seconds 2
+            $installTask = Get-ScheduledTask -TaskName $installTaskName
+            $installInfo = Get-ScheduledTaskInfo -TaskName $installTaskName
+            $installHasRun = $installInfo.LastRunTime -ge $installRequestedAt.AddSeconds(-5)
+        } while ((-not $installHasRun -or $installTask.State -eq "Running") -and (Get-Date) -lt $installDeadline)
+
+        if (-not $installHasRun -or $installTask.State -eq "Running") {
+            throw "Ollama installation did not finish within 10 minutes."
+        }
+        $installResult = $installInfo.LastTaskResult
+        if ($installResult -ne 0) {
+            throw "winget could not install Ollama for '$interactiveUser' (task result 0x$($installResult.ToString('X8')))."
+        }
+    } finally {
+        Unregister-ScheduledTask -TaskName $installTaskName -Confirm:$false -ErrorAction SilentlyContinue
     }
 
     $ollamaExecutable = $ollamaCandidates |
-        Where-Object { Test-Path -LiteralPath $_ } |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
         Select-Object -First 1
     if (-not $ollamaExecutable) {
-        throw "Ollama was installed, but ollama.exe could not be located. Sign out and back in, then re-run this installer."
+        throw "Ollama installation completed, but ollama.exe could not be found in '$interactiveProfilePath'."
     }
-    Write-Success "Ollama installed."
+    Write-Success "Ollama installed for $interactiveUser."
 }
 
 # -- 2. OpenVPN client ------------------------------------------------------------
@@ -274,17 +319,29 @@ if ($nvidiaSmi) {
 Write-Step "Enabling remote access to Ollama"
 [Environment]::SetEnvironmentVariable("OLLAMA_HOST", "0.0.0.0", "Machine")
 $env:OLLAMA_HOST = "0.0.0.0"
-Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Write-Success "Set OLLAMA_HOST=0.0.0.0 (machine-wide)."
+Copy-Item -Path $OllamaLauncherSourcePath -Destination $OllamaLauncherInstallPath -Force
 
-# Restart Ollama ourselves. Killing the tray app to apply OLLAMA_HOST and then
-# waiting for it to relaunch leaves the installer stuck on PCs where no tray
-# supervisor is running.
+$ollamaAction = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$OllamaLauncherInstallPath`" -OllamaExecutable `"$ollamaExecutable`""
+$ollamaTrigger = New-ScheduledTaskTrigger -AtLogOn -User $interactiveUser
+$ollamaPrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
+$ollamaSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650)
+$existingOllamaTask = Get-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
+if ($existingOllamaTask) {
+    Stop-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
+}
+Register-ScheduledTask -TaskName $OllamaTaskName -Action $ollamaAction -Trigger $ollamaTrigger `
+    -Principal $ollamaPrincipal -Settings $ollamaSettings -Force -ErrorAction Stop | Out-Null
+
+Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Write-Success "Set OLLAMA_HOST=0.0.0.0 and configured Ollama to run as $interactiveUser."
+
 Start-Sleep -Seconds 1
 try {
-    Start-Process -FilePath $ollamaExecutable -ArgumentList "serve" -WindowStyle Hidden -ErrorAction Stop
+    Start-ScheduledTask -TaskName $OllamaTaskName -ErrorAction Stop
 } catch {
-    throw "Ollama could not be started automatically from '$ollamaExecutable': $($_.Exception.Message)"
+    throw "Ollama could not be started as '$interactiveUser': $($_.Exception.Message)"
 }
 
 $ollamaBackUp = $false
@@ -299,9 +356,9 @@ for ($i = 0; $i -lt 15; $i++) {
     }
 }
 if ($ollamaBackUp) {
-    Write-Success "Ollama was restarted and is reachable."
+    Write-Success "Ollama was restarted as $interactiveUser and is reachable."
 } else {
-    throw "Ollama did not become reachable within 30 seconds after starting '$ollamaExecutable'. Check the Ollama logs, then re-run this installer."
+    throw "Ollama did not become reachable within 30 seconds after starting it as '$interactiveUser'. Check Task Scheduler task '$OllamaTaskName' and the Ollama logs, then re-run this installer."
 }
 
 # Replace the legacy profile-only rule with a route-specific rule. VPN
