@@ -8,7 +8,7 @@ Fitz-Net's AI-node installer (`Fitz-Net/scripts/ai-node-installer/`) bundles a p
 
 ## Primary path: the GitHub Actions workflow
 
-`Fitz-Net`'s `.github/workflows/generate-ai-node-package.yml` automates everything below (§1–2) end to end: trigger it with a node name, it SSHes to this Pi using a dedicated, restricted key, runs `onboard-ai-node.sh` here, and hands you back a ready-to-send zip (installer, uninstaller, heartbeat, shared network helper, and the generated `.ovpn`) as a workflow artifact — no manual SSH/scp on your end at all.
+`Fitz-Net`'s `.github/workflows/generate-ai-node-package.yml` automates everything below (§1–2) end to end: trigger it with a node name, it SSHes to this Pi using a dedicated, restricted key, runs `onboard-ai-node.sh` here, and hands you back a ready-to-send zip (installer, uninstaller, heartbeat, VPN control script, shared network helper, and the generated `.ovpn`) as a workflow artifact — no manual SSH/scp on your end at all.
 
 Getting that automation working requires a **one-time setup on this Pi**, since GitHub can't SSH in without a key you've explicitly authorized, and that key is deliberately restricted to doing only this one thing (see "Why a restricted key" below):
 
@@ -97,14 +97,14 @@ cd $EASYRSA_DIR
 
 Then reload/restart the OpenVPN server so it picks up the updated CRL (`systemctl restart openvpn@server` or equivalent), and separately delete the node from `fitz-net-api`'s registry (there's no admin UI for this yet in phase 1 — a direct Mongo delete on the `ai_nodes` collection, or ask for a `/node/{id}` delete endpoint to be added if this becomes routine).
 
-## Split-tunnel vs. full-tunnel — check before handing off
+## Split-tunnel vs. full-tunnel
 
-This is a property of your base client template (`CLIENT_TEMPLATE` / PiVPN's `client-common.txt`), not something either the script or the installer decides:
+The AI-node installer enforces a narrow split tunnel in the installed profile with `route-nopull` plus a host route to `192.168.1.59`. This protects a node even if the OpenVPN server globally pushes `redirect-gateway` or a wider LAN route:
 
 - **Full tunnel**: if the template has `redirect-gateway def1 bypass-dhcp` (or similar), the node's *entire* internet connection routes through your home network once connected — all its normal browsing/streaming/etc, not just traffic meant for you. Almost certainly not what you want for an AI node.
-- **Split tunnel** (what you want): the template instead pushes a route just for what the node actually needs to reach — see §5 below for the specific narrow route, rather than your whole LAN — with no `redirect-gateway`. Only that traffic goes through the tunnel; the node's own internet traffic is unaffected.
+- **Split tunnel** (what the installer guarantees): only traffic bound for the Docker/API host uses the tunnel. The node owner's normal browsing, streaming, and other internet traffic continues to use their own connection.
 
-Check for `redirect-gateway` in the template before generating a node's profile, and remove it (or keep a separate, narrower template just for AI nodes) if present. Also check the template isn't pushing DNS servers (`dhcp-option DNS ...`) unless you actually want the node's DNS lookups going through your network too.
+The server template should still avoid `redirect-gateway` and pushed DNS for least surprise, but a generated AI-node package no longer depends on that server-wide policy being correct.
 
 ## 5. Private node-to-orchestrator traffic (routing a remote node's chat requests)
 

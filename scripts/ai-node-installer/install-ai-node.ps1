@@ -39,11 +39,10 @@
 
 .PARAMETER AutoStartVpn
     Whether the OpenVPN profile should connect automatically every time this
-    PC boots ("yes"/"no"). Only asked if -InstallVpn is "yes". If omitted,
-    you'll be asked. Choose "no" if you'd rather this PC's VPN tunnel only
-    be active when you deliberately start it yourself (via the OpenVPN GUI)
-    - some people don't want a VPN silently up in the background all the
-    time.
+    PC boots ("yes"/"no"). Only asked if -InstallVpn is "yes". The safe
+    default is "no": the tunnel starts disconnected and can be controlled
+    later with manage-ai-node-vpn.ps1. "yes" is an explicit opt-in that keeps
+    the VPN active in the background and reconnects it after every boot.
 
 .EXAMPLE
     .\install-ai-node.ps1 -Token "abc123..." -NodeName "brother-pc"
@@ -68,6 +67,9 @@ $OpenVpnConfigDir = "C:\Program Files\OpenVPN\config"
 $HeartbeatScriptPath = Join-Path $InstallDir "heartbeat.ps1"
 $NetworkHelperSourcePath = Join-Path $PSScriptRoot "node-network.ps1"
 $NetworkHelperInstallPath = Join-Path $InstallDir "node-network.ps1"
+$VpnManagerSourcePath = Join-Path $PSScriptRoot "manage-ai-node-vpn.ps1"
+$VpnManagerInstallPath = Join-Path $InstallDir "manage-ai-node-vpn.ps1"
+$VpnApiHostAddress = "192.168.1.59"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
 $LegacyFirewallRuleName = "Fitz-Net Ollama"
 $LanFirewallRuleName = "Fitz-Net Ollama (LAN)"
@@ -121,6 +123,9 @@ if (-not $OllamaAddress -and $existingConfig -and $existingConfig.addressMode -e
 if ($installVpn -and -not (Test-Path $OvpnSourcePath)) {
     throw "VPN installation was selected, but node.ovpn is missing next to this script. Re-download a complete per-node package or re-run with -InstallVpn no for a LAN-only node."
 }
+if ($installVpn -and -not (Test-Path $VpnManagerSourcePath)) {
+    throw "VPN installation was selected, but manage-ai-node-vpn.ps1 is missing next to this script. Re-download the complete installer package."
+}
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
@@ -156,16 +161,20 @@ if (-not $installVpn) {
     Write-Skip "The node still registers and works for local/LAN chat routing without it."
 } else {
     if (-not $AutoStartVpn) {
-        $AutoStartVpn = Read-Host "Connect the VPN automatically every time this PC boots? (yes/no)"
+        Write-Host "    The recommended default is NO: the VPN stays off until you run the control script." -ForegroundColor Yellow
+        Write-Host "    YES keeps the VPN active in the background and reconnects it automatically after every boot." -ForegroundColor Yellow
+        $AutoStartVpn = Read-Host "Enable VPN auto-start? Type yes to opt in, or press Enter for no"
     }
     $autoStart = $AutoStartVpn -match '^(y|yes)$'
 
     if ($autoStart) {
+        Write-Host "    WARNING: VPN auto-start explicitly enabled; the tunnel will stay active and reconnect after boot." -ForegroundColor Yellow
         New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
         $destOvpn = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
         Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+        Set-SplitTunnelProfile -ProfilePath $destOvpn -ApiHostAddress $VpnApiHostAddress
         Remove-Item -Path (Join-Path $OpenVpnConfigDir "fitznet-node.ovpn") -Force -ErrorAction SilentlyContinue
-        Write-Success "Profile copied to $destOvpn (auto-connects as a service on boot)."
+        Write-Success "Installed a split-tunnel profile at $destOvpn (auto-connects as a service on boot)."
 
         $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
         if ($service) {
@@ -196,16 +205,20 @@ if (-not $installVpn) {
         New-Item -ItemType Directory -Force -Path $OpenVpnConfigDir | Out-Null
         $destOvpn = Join-Path $OpenVpnConfigDir "fitznet-node.ovpn"
         Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+        Set-SplitTunnelProfile -ProfilePath $destOvpn -ApiHostAddress $VpnApiHostAddress
         $autoProfilePath = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
         if (Test-Path $autoProfilePath) {
             Remove-Item -Path $autoProfilePath -Force
-            $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
-            if ($service -and $service.Status -eq "Running") {
-                Restart-Service -Name "OpenVPNService"
-            }
         }
-        Write-Success "Profile copied to $destOvpn (does NOT auto-connect)."
-        Write-Host "    To connect: open the OpenVPN GUI, right-click its tray icon, and choose 'fitznet-node' > Connect." -ForegroundColor Yellow
+        $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
+        if ($service) {
+            if ($service.Status -ne "Stopped") {
+                Stop-Service -Name "OpenVPNService" -Force
+            }
+            Set-Service -Name "OpenVPNService" -StartupType Manual
+        }
+        Write-Success "Installed a split-tunnel profile at $destOvpn with the VPN disconnected and startup disabled."
+        Write-Host "    To connect later: run C:\ProgramData\FitzNetNode\manage-ai-node-vpn.ps1 as Administrator." -ForegroundColor Yellow
         Write-Host "    This node will report OFFLINE until the VPN is connected." -ForegroundColor Yellow
     }
 }
@@ -324,7 +337,21 @@ if (Test-Path $NodeConfigPath) {
         address = $registrationAddress
     } | ConvertTo-Json
 
-    $response = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/node/register" -ContentType "application/json" -Body $body
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri "$ApiBaseUrl/node/register" `
+            -ContentType "application/json" -Body $body -ErrorAction Stop
+    } catch {
+        $statusCode = $null
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+        }
+
+        if ($statusCode -eq 401) {
+            throw "The enrollment token was rejected. Generate a new token on the Fitz-Net website and re-run the installer within 30 minutes. Enrollment tokens can only be used once."
+        }
+
+        throw
+    }
 
     $nodeConfig = @{
         nodeId     = $response.nodeId
@@ -353,6 +380,9 @@ Write-Success "Saved routing mode '$addressMode' for future heartbeats."
 Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
 Copy-Item -Path $NetworkHelperSourcePath -Destination $NetworkHelperInstallPath -Force
+if ($installVpn) {
+    Copy-Item -Path $VpnManagerSourcePath -Destination $VpnManagerInstallPath -Force
+}
 
 $existingTask = Get-ScheduledTask -TaskName $HeartbeatTaskName -ErrorAction SilentlyContinue
 if ($existingTask) {
@@ -377,3 +407,6 @@ Write-Success "Reported the node's current chat readiness."
 Write-Step "Done"
 Write-Host "    This machine is now registered as a Fitz-Net AI node." -ForegroundColor Green
 Write-Host "    Check the Status tab at fitznet.org to see it come online." -ForegroundColor Green
+if ($installVpn -and -not $autoStart) {
+    Write-Host "    VPN is OFF and will stay off after reboot. Run the installed VPN control script when you want to make this node available." -ForegroundColor Yellow
+}
