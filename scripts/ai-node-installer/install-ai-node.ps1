@@ -203,6 +203,7 @@ if ($ollamaExecutable) {
             throw "winget could not install Ollama for '$interactiveUser' (task result 0x$($installResult.ToString('X8')))."
         }
     } finally {
+        Stop-ScheduledTask -TaskName $installTaskName -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $installTaskName -Confirm:$false -ErrorAction SilentlyContinue
     }
 
