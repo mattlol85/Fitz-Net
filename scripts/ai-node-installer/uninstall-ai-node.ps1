@@ -24,6 +24,7 @@ $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
 $OllamaTaskName = "FitzNetOllamaServe"
+$NodeConsoleTaskName = "FitzNetNodeConsole"
 $FirewallRuleNames = @(
     "Fitz-Net Ollama",
     "Fitz-Net Ollama (LAN)",
@@ -47,6 +48,7 @@ function Write-Skip($message) {
 
 # -- 1. Deregister from fitz-net-api (best-effort) -----------------------------
 Write-Step "Deregistering from fitz-net-api"
+$config = $null
 if (Test-Path $NodeConfigPath) {
     try {
         $config = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
@@ -60,14 +62,33 @@ if (Test-Path $NodeConfigPath) {
     Write-Skip "No node.json found - nothing to deregister."
 }
 
-# -- 2. Heartbeat scheduled task -------------------------------------------------
-Write-Step "Removing scheduled heartbeat task"
-$existingTask = Get-ScheduledTask -TaskName $HeartbeatTaskName -ErrorAction SilentlyContinue
-if ($existingTask) {
-    Unregister-ScheduledTask -TaskName $HeartbeatTaskName -Confirm:$false
-    Write-Success "Removed scheduled task '$HeartbeatTaskName'."
-} else {
-    Write-Skip "No scheduled task found."
+# -- 2. Heartbeat and console scheduled tasks -----------------------------------
+Write-Step "Removing heartbeat and node console tasks"
+foreach ($taskName in @($HeartbeatTaskName, $NodeConsoleTaskName)) {
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($existingTask) {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+        Write-Success "Removed scheduled task '$taskName'."
+    } else {
+        Write-Skip "Scheduled task '$taskName' was not present."
+    }
+}
+
+$installedConsolePath = Join-Path $InstallDir "node-console.ps1"
+Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($installedConsolePath) } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+if ($config -and $config.consoleShortcutPath) {
+    $shortcutPath = [System.IO.Path]::GetFullPath([string]$config.consoleShortcutPath)
+    $expectedSuffix = "\Desktop\Fitz-Net AI Node Console.lnk"
+    if ($shortcutPath.StartsWith("C:\Users\", [System.StringComparison]::OrdinalIgnoreCase) -and
+        $shortcutPath.EndsWith($expectedSuffix, [System.StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $shortcutPath)) {
+        Remove-Item -LiteralPath $shortcutPath -Force
+        Write-Success "Removed the Fitz-Net node console desktop shortcut."
+    }
 }
 
 # -- 3. Ollama scheduled task ----------------------------------------------------
@@ -79,6 +100,43 @@ if ($ollamaTask) {
     Write-Success "Removed scheduled task '$OllamaTaskName'."
 } else {
     Write-Skip "No Fitz-Net Ollama task found."
+}
+
+# Restore vendor startup entries only when this installer previously removed
+# them. Do not overwrite a startup entry the user or a later app update added.
+$ollamaStartupBackupPath = Join-Path $InstallDir "Ollama.lnk.disabled"
+if ($config -and $config.ollamaStartupShortcutPath -and (Test-Path -LiteralPath $ollamaStartupBackupPath)) {
+    $startupPath = [System.IO.Path]::GetFullPath([string]$config.ollamaStartupShortcutPath)
+    $expectedSuffix = "\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk"
+    if ($startupPath.StartsWith("C:\Users\", [System.StringComparison]::OrdinalIgnoreCase) -and
+        $startupPath.EndsWith($expectedSuffix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-Path -LiteralPath $startupPath)) {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $startupPath) -Force | Out-Null
+            Move-Item -LiteralPath $ollamaStartupBackupPath -Destination $startupPath
+            Write-Success "Restored Ollama's original sign-in shortcut."
+        } else {
+            Write-Skip "Ollama already has a sign-in shortcut; kept the current one."
+        }
+    }
+}
+
+if ($config -and $config.ollamaOwner -and $config.openVpnGuiStartupCommand) {
+    try {
+        $ownerSid = (New-Object System.Security.Principal.NTAccount([string]$config.ollamaOwner)).Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        $ownerRunPath = "Registry::HKEY_USERS\$ownerSid\Software\Microsoft\Windows\CurrentVersion\Run"
+        New-Item -Path $ownerRunPath -Force | Out-Null
+        $currentOpenVpnGui = Get-ItemPropertyValue -LiteralPath $ownerRunPath `
+            -Name "OpenVPN-GUI" -ErrorAction SilentlyContinue
+        if (-not $currentOpenVpnGui) {
+            New-ItemProperty -LiteralPath $ownerRunPath -Name "OpenVPN-GUI" `
+                -Value ([string]$config.openVpnGuiStartupCommand) -PropertyType String -Force | Out-Null
+            Write-Success "Restored OpenVPN GUI's original sign-in entry."
+        }
+    } catch {
+        Write-Host "    WARNING: could not restore the OpenVPN GUI sign-in entry: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 }
 
 # -- 4. Local node files ---------------------------------------------------------
