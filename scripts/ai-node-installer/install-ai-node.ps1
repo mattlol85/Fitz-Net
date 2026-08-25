@@ -71,9 +71,12 @@ $VpnManagerSourcePath = Join-Path $PSScriptRoot "manage-ai-node-vpn.ps1"
 $VpnManagerInstallPath = Join-Path $InstallDir "manage-ai-node-vpn.ps1"
 $OllamaLauncherSourcePath = Join-Path $PSScriptRoot "start-ollama.ps1"
 $OllamaLauncherInstallPath = Join-Path $InstallDir "start-ollama.ps1"
+$NodeConsoleSourcePath = Join-Path $PSScriptRoot "node-console.ps1"
+$NodeConsoleInstallPath = Join-Path $InstallDir "node-console.ps1"
 $VpnApiHostAddress = "192.168.1.59"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
 $OllamaTaskName = "FitzNetOllamaServe"
+$NodeConsoleTaskName = "FitzNetNodeConsole"
 $LegacyFirewallRuleName = "Fitz-Net Ollama"
 $LanFirewallRuleName = "Fitz-Net Ollama (LAN)"
 $VpnFirewallRuleName = "Fitz-Net Ollama (VPN)"
@@ -97,6 +100,9 @@ if (-not (Test-Path $NetworkHelperSourcePath)) {
 }
 if (-not (Test-Path $OllamaLauncherSourcePath)) {
     throw "start-ollama.ps1 was not found next to the installer. Re-download the complete installer package."
+}
+if (-not (Test-Path $NodeConsoleSourcePath)) {
+    throw "node-console.ps1 was not found next to the installer. Re-download the complete installer package."
 }
 . $NetworkHelperSourcePath
 
@@ -158,6 +164,9 @@ if (-not $interactiveProfile -or [string]::IsNullOrWhiteSpace($interactiveProfil
 }
 
 $interactiveProfilePath = $interactiveProfile.LocalPath
+$ollamaLogPath = Join-Path $interactiveProfilePath "AppData\Local\FitzNetNode\ollama.log"
+$consoleShortcutPath = Join-Path $interactiveProfilePath "Desktop\Fitz-Net AI Node Console.lnk"
+$windowsTerminalPath = Join-Path $interactiveProfilePath "AppData\Local\Microsoft\WindowsApps\wt.exe"
 $ollamaExecutable = $null
 $ollamaCandidates = @(
     (Join-Path $interactiveProfilePath "AppData\Local\Programs\Ollama\ollama.exe"),
@@ -321,9 +330,11 @@ Write-Step "Enabling remote access to Ollama"
 [Environment]::SetEnvironmentVariable("OLLAMA_HOST", "0.0.0.0", "Machine")
 $env:OLLAMA_HOST = "0.0.0.0"
 Copy-Item -Path $OllamaLauncherSourcePath -Destination $OllamaLauncherInstallPath -Force
+Write-Success "Updated the Ollama background launcher."
 
+Write-Host "    Replacing the Ollama startup task..." -ForegroundColor DarkGray
 $ollamaAction = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$OllamaLauncherInstallPath`" -OllamaExecutable `"$ollamaExecutable`""
+    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$OllamaLauncherInstallPath`" -OllamaExecutable `"$ollamaExecutable`" -LogPath `"$ollamaLogPath`""
 $ollamaTrigger = New-ScheduledTaskTrigger -AtLogOn -User $interactiveUser
 $ollamaPrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
 $ollamaSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
@@ -335,10 +346,12 @@ if ($existingOllamaTask) {
 Register-ScheduledTask -TaskName $OllamaTaskName -Action $ollamaAction -Trigger $ollamaTrigger `
     -Principal $ollamaPrincipal -Settings $ollamaSettings -Force -ErrorAction Stop | Out-Null
 
+Write-Host "    Stopping the previous Ollama process..." -ForegroundColor DarkGray
 Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Write-Success "Set OLLAMA_HOST=0.0.0.0 and configured Ollama to run as $interactiveUser."
 
 Start-Sleep -Seconds 1
+Write-Host "    Starting Ollama and waiting up to 30 seconds for its API..." -ForegroundColor DarkGray
 try {
     Start-ScheduledTask -TaskName $OllamaTaskName -ErrorAction Stop
 } catch {
@@ -456,6 +469,9 @@ if (Test-Path $NodeConfigPath) {
         nodeName   = $NodeName
         addressMode = $addressMode
         ollamaAddress = if ($addressMode -eq "fixed") { $OllamaAddress } else { "" }
+        ollamaOwner = $interactiveUser
+        ollamaLogPath = $ollamaLogPath
+        consoleShortcutPath = $consoleShortcutPath
     } | ConvertTo-Json
 
     Set-Content -Path $NodeConfigPath -Value $nodeConfig -Encoding UTF8
@@ -469,6 +485,9 @@ $nodeConfig = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
 $nodeConfig | Add-Member -NotePropertyName addressMode -NotePropertyValue $addressMode -Force
 $nodeConfig | Add-Member -NotePropertyName ollamaAddress `
     -NotePropertyValue $(if ($addressMode -eq "fixed") { $OllamaAddress } else { "" }) -Force
+$nodeConfig | Add-Member -NotePropertyName ollamaOwner -NotePropertyValue $interactiveUser -Force
+$nodeConfig | Add-Member -NotePropertyName ollamaLogPath -NotePropertyValue $ollamaLogPath -Force
+$nodeConfig | Add-Member -NotePropertyName consoleShortcutPath -NotePropertyValue $consoleShortcutPath -Force
 $nodeConfig | ConvertTo-Json | Set-Content -Path $NodeConfigPath -Encoding UTF8
 Write-Success "Saved routing mode '$addressMode' for future heartbeats."
 
@@ -476,8 +495,47 @@ Write-Success "Saved routing mode '$addressMode' for future heartbeats."
 Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
 Copy-Item -Path $NetworkHelperSourcePath -Destination $NetworkHelperInstallPath -Force
+Copy-Item -Path $NodeConsoleSourcePath -Destination $NodeConsoleInstallPath -Force
 if ($installVpn) {
     Copy-Item -Path $VpnManagerSourcePath -Destination $VpnManagerInstallPath -Force
+}
+
+$existingConsoleTask = Get-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction SilentlyContinue
+if ($existingConsoleTask) {
+    Stop-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction SilentlyContinue
+}
+# A previous Explorer/Terminal launch outlives its short scheduled-task action.
+# Stop only consoles running our installed script so an installer re-run can
+# replace an older hidden instance instead of losing to the single-instance lock.
+Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($NodeConsoleInstallPath) } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+$consoleAction = New-ScheduledTaskAction -Execute "explorer.exe" -Argument "`"$consoleShortcutPath`""
+$consoleTrigger = New-ScheduledTaskTrigger -AtLogOn -User $interactiveUser
+$consolePrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
+$consoleSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650)
+Register-ScheduledTask -TaskName $NodeConsoleTaskName -Action $consoleAction -Trigger $consoleTrigger `
+    -Principal $consolePrincipal -Settings $consoleSettings -Force -ErrorAction Stop | Out-Null
+Write-Success "Configured the visible node console to open for $interactiveUser at sign-in."
+
+if (Test-Path -LiteralPath (Split-Path -Parent $consoleShortcutPath)) {
+    $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($consoleShortcutPath)
+    if (Test-Path -LiteralPath $windowsTerminalPath -PathType Leaf) {
+        # Explicitly use Windows Terminal. Launching powershell.exe indirectly
+        # from Task Scheduler can otherwise create a headless pseudo-console
+        # when Windows Terminal is configured as the default terminal host.
+        $shortcut.TargetPath = $windowsTerminalPath
+        $shortcut.Arguments = "-w new new-tab --title `"Fitz-Net AI Node`" powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$NodeConsoleInstallPath`""
+    } else {
+        $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$NodeConsoleInstallPath`""
+    }
+    $shortcut.WorkingDirectory = $InstallDir
+    $shortcut.Description = "Fitz-Net AI node status and VPN controls"
+    $shortcut.WindowStyle = 1
+    $shortcut.Save()
+    Write-Success "Created desktop shortcut 'Fitz-Net AI Node Console'."
 }
 
 $existingTask = Get-ScheduledTask -TaskName $HeartbeatTaskName -ErrorAction SilentlyContinue
@@ -505,4 +563,10 @@ Write-Host "    This machine is now registered as a Fitz-Net AI node." -Foregrou
 Write-Host "    Check the Status tab at fitznet.org to see it come online." -ForegroundColor Green
 if ($installVpn -and -not $autoStart) {
     Write-Host "    VPN is OFF and will stay off after reboot. Run the installed VPN control script when you want to make this node available." -ForegroundColor Yellow
+}
+Write-Host "    The status console opens now and at sign-in; it never connects the VPN automatically." -ForegroundColor Cyan
+try {
+    Start-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction Stop
+} catch {
+    Write-Host "    WARNING: the node console could not be opened automatically. Use the desktop shortcut instead." -ForegroundColor Yellow
 }

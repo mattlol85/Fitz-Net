@@ -24,6 +24,7 @@ $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
 $OllamaTaskName = "FitzNetOllamaServe"
+$NodeConsoleTaskName = "FitzNetNodeConsole"
 $FirewallRuleNames = @(
     "Fitz-Net Ollama",
     "Fitz-Net Ollama (LAN)",
@@ -47,6 +48,7 @@ function Write-Skip($message) {
 
 # -- 1. Deregister from fitz-net-api (best-effort) -----------------------------
 Write-Step "Deregistering from fitz-net-api"
+$config = $null
 if (Test-Path $NodeConfigPath) {
     try {
         $config = Get-Content -Path $NodeConfigPath -Raw | ConvertFrom-Json
@@ -60,14 +62,33 @@ if (Test-Path $NodeConfigPath) {
     Write-Skip "No node.json found - nothing to deregister."
 }
 
-# -- 2. Heartbeat scheduled task -------------------------------------------------
-Write-Step "Removing scheduled heartbeat task"
-$existingTask = Get-ScheduledTask -TaskName $HeartbeatTaskName -ErrorAction SilentlyContinue
-if ($existingTask) {
-    Unregister-ScheduledTask -TaskName $HeartbeatTaskName -Confirm:$false
-    Write-Success "Removed scheduled task '$HeartbeatTaskName'."
-} else {
-    Write-Skip "No scheduled task found."
+# -- 2. Heartbeat and console scheduled tasks -----------------------------------
+Write-Step "Removing heartbeat and node console tasks"
+foreach ($taskName in @($HeartbeatTaskName, $NodeConsoleTaskName)) {
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($existingTask) {
+        Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+        Write-Success "Removed scheduled task '$taskName'."
+    } else {
+        Write-Skip "Scheduled task '$taskName' was not present."
+    }
+}
+
+$installedConsolePath = Join-Path $InstallDir "node-console.ps1"
+Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($installedConsolePath) } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+if ($config -and $config.consoleShortcutPath) {
+    $shortcutPath = [System.IO.Path]::GetFullPath([string]$config.consoleShortcutPath)
+    $expectedSuffix = "\Desktop\Fitz-Net AI Node Console.lnk"
+    if ($shortcutPath.StartsWith("C:\Users\", [System.StringComparison]::OrdinalIgnoreCase) -and
+        $shortcutPath.EndsWith($expectedSuffix, [System.StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $shortcutPath)) {
+        Remove-Item -LiteralPath $shortcutPath -Force
+        Write-Success "Removed the Fitz-Net node console desktop shortcut."
+    }
 }
 
 # -- 3. Ollama scheduled task ----------------------------------------------------
