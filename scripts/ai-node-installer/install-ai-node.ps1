@@ -530,6 +530,16 @@ if (Test-Path -LiteralPath (Split-Path -Parent $consoleShortcutPath)) {
     $shortcut.Description = "Fitz-Net AI node status and VPN controls"
     $shortcut.WindowStyle = 1
     $shortcut.Save()
+    # WScript.Shell does not expose the Shell Link RunAsUser flag. It is bit
+    # 13 of the LinkFlags DWORD at offset 0x14 in the documented .lnk header.
+    # Setting the corresponding byte makes Windows show one UAC prompt as the
+    # shortcut opens; the elevated dashboard then handles every control.
+    $shortcutBytes = [System.IO.File]::ReadAllBytes($consoleShortcutPath)
+    if ($shortcutBytes.Length -le 0x15) {
+        throw "The node console shortcut was created with an invalid shell-link header."
+    }
+    $shortcutBytes[0x15] = $shortcutBytes[0x15] -bor 0x20
+    [System.IO.File]::WriteAllBytes($consoleShortcutPath, $shortcutBytes)
     Write-Success "Created desktop shortcut 'Fitz-Net AI Node Console'."
 }
 
@@ -565,7 +575,8 @@ Write-Step "Done"
 Write-Host "    This machine is now registered as a Fitz-Net AI node." -ForegroundColor Green
 Write-Host "    Check the Status tab at fitznet.org to see it come online." -ForegroundColor Green
 Write-Host "    Ollama and the VPN are OFF and will stay off after reboot." -ForegroundColor Yellow
-Write-Host "    The status console opens now. Later, use its desktop shortcut to start the node manually." -ForegroundColor Cyan
+Write-Host "    The status console opens now. Approve its one UAC prompt; its controls will not prompt again." -ForegroundColor Cyan
+Write-Host "    Later, use the desktop shortcut to start the node manually." -ForegroundColor Cyan
 try {
     Start-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction Stop
 } catch {

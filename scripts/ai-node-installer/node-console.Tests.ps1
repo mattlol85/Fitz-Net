@@ -35,3 +35,27 @@ Describe "Fitz-Net node console request activity" {
         ($keys -contains "10.180.53.1:51005") | Should Be $true
     }
 }
+
+Describe "Fitz-Net node console elevation" {
+    It "requests administrator elevation once when launching the console" {
+        Mock Test-Path { $true }
+        Mock Start-Process { return $null }
+
+        Start-ElevatedNodeConsole
+
+        Assert-MockCalled Start-Process 1 -ParameterFilter { $Verb -eq "RunAs" }
+    }
+
+    It "reuses an elevated console without another RunAs prompt" {
+        $script:IsAdministrator = $true
+        Mock Test-Path { $true }
+        Mock Start-Process { [pscustomobject]@{ ExitCode = 0 } }
+
+        Invoke-NodeControl -ScriptPath "C:\ProgramData\FitzNetNode\manager.ps1" `
+            -Action "Start" -Component "Test"
+
+        Assert-MockCalled Start-Process 1 -ParameterFilter {
+            $WindowStyle -eq "Hidden" -and -not $Verb
+        }
+    }
+}

@@ -21,6 +21,12 @@ param(
 $ErrorActionPreference = "Stop"
 $Host.UI.RawUI.WindowTitle = "Fitz-Net AI Node"
 
+$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+$IsAdministrator = $currentPrincipal.IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator
+)
+
 $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $NetworkHelperPath = Join-Path $PSScriptRoot "node-network.ps1"
@@ -109,33 +115,56 @@ function Get-NodeConsoleSnapshot {
     }
 }
 
+function Invoke-NodeControl {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [Parameter(Mandatory = $true)][string]$Action,
+        [Parameter(Mandatory = $true)][string]$Component
+    )
+
+    if (-not (Test-Path $ScriptPath)) {
+        throw "$Component manager is missing. Re-run install-ai-node.ps1 to repair this node."
+    }
+
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" -Action $Action"
+    $startParameters = @{
+        FilePath = "powershell.exe"
+        ArgumentList = $arguments
+        Wait = $true
+        PassThru = $true
+    }
+    if ($script:IsAdministrator) {
+        $startParameters.WindowStyle = "Hidden"
+    } else {
+        # Defensive fallback for direct function use. The normal dashboard
+        # path elevates once before its event loop begins.
+        $startParameters.Verb = "RunAs"
+    }
+
+    $process = Start-Process @startParameters
+    if ($process.ExitCode -ne 0) {
+        throw "$Component $Action failed with exit code $($process.ExitCode)."
+    }
+}
+
 function Invoke-VpnControl {
     param([ValidateSet("Connect", "Disconnect")][string]$Action)
-
-    if (-not (Test-Path $VpnManagerPath)) {
-        throw "VPN manager is missing. Re-run install-ai-node.ps1 to repair this node."
-    }
-
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$VpnManagerPath`" -Action $Action"
-    $process = Start-Process -FilePath "powershell.exe" -Verb RunAs `
-        -ArgumentList $arguments -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "VPN $Action failed with exit code $($process.ExitCode)."
-    }
+    Invoke-NodeControl -ScriptPath $VpnManagerPath -Action $Action -Component "VPN"
 }
 
 function Invoke-OllamaControl {
     param([ValidateSet("Start", "Stop")][string]$Action)
+    Invoke-NodeControl -ScriptPath $OllamaManagerPath -Action $Action -Component "Ollama"
+}
 
-    if (-not (Test-Path $OllamaManagerPath)) {
-        throw "Ollama manager is missing. Re-run install-ai-node.ps1 to repair this node."
-    }
-
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$OllamaManagerPath`" -Action $Action"
-    $process = Start-Process -FilePath "powershell.exe" -Verb RunAs `
-        -ArgumentList $arguments -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        throw "Ollama $Action failed with exit code $($process.ExitCode)."
+function Start-ElevatedNodeConsole {
+    $windowsTerminalPath = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\wt.exe"
+    if (Test-Path -LiteralPath $windowsTerminalPath -PathType Leaf) {
+        $arguments = "-w new new-tab --title `"Fitz-Net AI Node (Administrator)`" powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+        Start-Process -FilePath $windowsTerminalPath -Verb RunAs -ArgumentList $arguments | Out-Null
+    } else {
+        $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+        Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList $arguments | Out-Null
     }
 }
 
@@ -162,6 +191,7 @@ function Write-NodeConsole {
     Write-Host (" " + " FITZ-NET AI NODE ".PadRight(61)) -ForegroundColor White -BackgroundColor DarkCyan
     Write-Host ("  {0}" -f $NodeName) -ForegroundColor Cyan
     Write-Host ("  Updated {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")) -ForegroundColor DarkGray
+    Write-Host "  Administrator controls enabled - one UAC approval covers this session" -ForegroundColor DarkGreen
     Write-Host ""
 
     $vpnText = if ($Snapshot.VpnConnected) {
@@ -242,6 +272,12 @@ if ($NoRun) {
     return
 }
 
+if (-not $IsAdministrator) {
+    Start-ElevatedNodeConsole
+    return
+}
+$Host.UI.RawUI.WindowTitle = "Fitz-Net AI Node (Administrator)"
+
 $consoleMutex = New-Object System.Threading.Mutex($false, "Local\FitzNetNodeConsole")
 if (-not $consoleMutex.WaitOne(0, $false)) {
     return
@@ -301,7 +337,7 @@ do {
                 $key = [Console]::ReadKey($true).Key
                 switch ($key) {
                     "O" {
-                        Add-ConsoleActivity "Starting Ollama - approve the UAC prompt" "Yellow"
+                        Add-ConsoleActivity "Starting Ollama" "Yellow"
                         try {
                             Invoke-OllamaControl -Action Start
                             Add-ConsoleActivity "Ollama started" "Green"
@@ -310,7 +346,7 @@ do {
                         }
                     }
                     "X" {
-                        Add-ConsoleActivity "Stopping Ollama - approve the UAC prompt" "Yellow"
+                        Add-ConsoleActivity "Stopping Ollama" "Yellow"
                         try {
                             Invoke-OllamaControl -Action Stop
                             Add-ConsoleActivity "Ollama stopped" "Green"
@@ -319,7 +355,7 @@ do {
                         }
                     }
                     "C" {
-                        Add-ConsoleActivity "Connecting VPN - approve the UAC prompt" "Yellow"
+                        Add-ConsoleActivity "Connecting VPN" "Yellow"
                         try {
                             Invoke-VpnControl -Action Connect
                             Add-ConsoleActivity "VPN connected" "Green"
@@ -328,7 +364,7 @@ do {
                         }
                     }
                     "D" {
-                        Add-ConsoleActivity "Disconnecting VPN - approve the UAC prompt" "Yellow"
+                        Add-ConsoleActivity "Disconnecting VPN" "Yellow"
                         try {
                             Invoke-VpnControl -Action Disconnect
                             Add-ConsoleActivity "VPN disconnected" "Green"

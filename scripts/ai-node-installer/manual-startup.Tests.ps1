@@ -63,4 +63,8 @@ Describe "Fitz-Net manual node startup" {
         $uninstallerSource | Should Match "Restored Ollama's original sign-in shortcut"
         $uninstallerSource | Should Match "Restored OpenVPN GUI's original sign-in entry"
     }
+
+    It "marks the desktop shortcut to run as administrator" {
+        $installerSource | Should Match '\$shortcutBytes\[0x15\]\s*=\s*\$shortcutBytes\[0x15\]\s*-bor\s*0x20'
+    }
 }

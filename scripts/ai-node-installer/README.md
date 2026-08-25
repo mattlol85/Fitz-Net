@@ -49,9 +49,9 @@ Connect starts the VPN for the current Windows session but leaves the OpenVPN se
 
 ## Live node console
 
-The installer opens a colored PowerShell console and creates a **Fitz-Net AI Node Console** desktop shortcut. Nothing is added to Windows logon: after a reboot, the owner opens this shortcut when they want to use the node. The console shows the authoritative VPN adapter address, OpenVPN service/startup state, Ollama health, installed models, active website calls, and recent chat activity. This avoids confusion with OpenVPN GUI, whose tray menu may still say **Connect** because the Fitz-Net profile is controlled by the Windows service instead of that GUI session.
+The installer opens a colored PowerShell console and creates a **Fitz-Net AI Node Console** desktop shortcut. Nothing is added to Windows logon: after a reboot, the owner opens this shortcut when they want to use the node. Windows shows one UAC approval when the console opens; that elevated session handles every later control without prompting again. The console shows the authoritative VPN adapter address, OpenVPN service/startup state, Ollama health, installed models, active website calls, and recent chat activity. This avoids confusion with OpenVPN GUI, whose tray menu may still say **Connect** because the Fitz-Net profile is controlled by the Windows service instead of that GUI session.
 
-Use **O** to start Ollama, **X** to stop Ollama, **C** to connect the VPN, **D** to disconnect it, **R** to refresh, and **Q** to close only the console. Start, Stop, Connect, and Disconnect display a normal Windows UAC prompt. Closing the console does not stop Ollama or change the VPN state.
+Use **O** to start Ollama, **X** to stop Ollama, **C** to connect the VPN, **D** to disconnect it, **R** to refresh, and **Q** to close only the console. These controls reuse the console's administrator session, so they do not show additional UAC prompts. Closing the console does not stop Ollama or change the VPN state.
 
 The console records request metadata only: arrival time, completion status, and duration. Prompt and response content are never shown or written to its activity display. Ollama's access log is rotated at 10 MB and retained as one previous file under the model owner's local application-data directory.
 
