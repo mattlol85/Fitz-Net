@@ -99,7 +99,7 @@ Then reload/restart the OpenVPN server so it picks up the updated CRL (`systemct
 
 ## Split-tunnel vs. full-tunnel
 
-The AI-node installer enforces a narrow split tunnel in the installed profile with `route-nopull` plus a host route to `192.168.1.59`. This protects a node even if the OpenVPN server globally pushes `redirect-gateway` or a wider LAN route:
+The AI-node installer enforces a narrow split tunnel in the installed profile with `route-nopull` plus `route 192.168.1.59 255.255.255.255 vpn_gateway`. The explicit `vpn_gateway` is required because `route-nopull` also discards the server's pushed routing options; without it, OpenVPN can send the API-host route through the node owner's LAN gateway instead of the tunnel. This protects a node even if the OpenVPN server globally pushes `redirect-gateway` or a wider LAN route:
 
 - **Full tunnel**: if the template has `redirect-gateway def1 bypass-dhcp` (or similar), the node's *entire* internet connection routes through your home network once connected — all its normal browsing/streaming/etc, not just traffic meant for you. Almost certainly not what you want for an AI node.
 - **Split tunnel** (what the installer guarantees): only traffic bound for the Docker/API host uses the tunnel. The node owner's normal browsing, streaming, and other internet traffic continues to use their own connection.
@@ -130,11 +130,12 @@ This is three separate pieces, all needed together — missing any one of them l
 
 **On the Docker host** (`192.168.1.59`, the Ubuntu VM running `fitz-net-api`):
 
-4. **Add a static route into the VPN subnet**, via this Pi as next-hop, so the *outbound* direction (Docker host → remote node) works:
+4. **Add a persistent route into the VPN subnet**, via this Pi as next-hop, so the *outbound* direction (Docker host → remote node) works. The repository helper applies it immediately, persists it with systemd, and can verify a connected node in the same command:
    ```bash
-   sudo ip route add <vpn-subnet-from-step-3> via <this-pi's-LAN-IP>
+   sudo /opt/fitznet/scripts/configure-ai-node-vpn-route.sh \
+     <vpn-subnet-from-step-3> <this-pi's-LAN-IP> [connected-node-vpn-ip]
    ```
-   Persist it (e.g. via netplan on Ubuntu) so it survives a reboot — an `ip route add` alone is lost on restart. `fitz-net-api` runs in Docker on this host; outbound container connections go through the host's routing table via the normal Docker NAT path, so this host-level route is sufficient on its own — no container-specific networking change needed.
+   Copy `scripts/proxmox/configure-ai-node-vpn-route.sh` to that location first. `fitz-net-api` runs in Docker on this host; outbound container connections go through the host's routing table via the normal Docker NAT path, so this host-level route is sufficient on its own — no container-specific networking change needed.
 
 **Verify before testing through the app** — from the Docker host itself:
 ```bash
