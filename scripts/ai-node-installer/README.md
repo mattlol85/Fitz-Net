@@ -20,7 +20,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
    - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
-3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, `manage-ai-node-vpn.ps1`, `manage-ai-node-ollama.ps1`, `start-ollama.ps1`, `node-console.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller and control scripts gives the node owner everything needed without another download.
+3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, `manage-ai-node-vpn.ps1`, `manage-ai-node-ollama.ps1`, `start-ollama.ps1`, `node-console.ps1`, `node-console-icon.ico`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller, controls, and desktop icon gives the node owner everything needed without another download.
 
 4. **Send the zip to the node owner**, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
 
@@ -49,7 +49,7 @@ Connect starts the VPN for the current Windows session but leaves the OpenVPN se
 
 ## Live node console
 
-The installer opens a colored PowerShell console and creates a **Fitz-Net AI Node Console** desktop shortcut. Nothing is added to Windows logon: after a reboot, the owner opens this shortcut when they want to use the node. Windows shows one UAC approval when the console opens; that elevated session handles every later control without prompting again. The console shows the authoritative VPN adapter address, OpenVPN service/startup state, Ollama health, installed models, active website calls, and recent chat activity. This avoids confusion with OpenVPN GUI, whose tray menu may still say **Connect** because the Fitz-Net profile is controlled by the Windows service instead of that GUI session.
+The installer opens a colored PowerShell console and creates a **Fitz-Net AI Node Console** desktop shortcut with the Fitz-Net robot icon. Nothing is added to Windows logon: after a reboot, the owner opens this shortcut when they want to use the node. Windows shows one UAC approval when the console opens; that elevated session handles every later control without prompting again. The console shows the authoritative VPN adapter address, OpenVPN service/startup state, Ollama health, installed models, active website calls, and recent chat activity. This avoids confusion with OpenVPN GUI, whose tray menu may still say **Connect** because the Fitz-Net profile is controlled by the Windows service instead of that GUI session.
 
 Use **O** to start Ollama, **X** to stop Ollama, **C** to connect the VPN, **D** to disconnect it, **R** to refresh, and **Q** to close only the console. These controls reuse the console's administrator session, so they do not show additional UAC prompts. Closing the console does not stop Ollama or change the VPN state.
 
@@ -69,6 +69,8 @@ Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregister
 - `manage-ai-node-ollama.ps1` — explicit Start/Stop/Status control for Ollama and its demand-only scheduled task.
 - `start-ollama.ps1` — runs Ollama with remote access under the signed-in model owner's Windows account when manually requested.
 - `node-console.ps1` — colored live status, manual VPN controls, and privacy-safe website request activity.
+- `node-console-icon.ico` — multi-resolution Windows shortcut icon for the node console.
+- `node-console-icon.png` — transparent high-resolution source art for the robot icon (not required in the installer zip).
 - `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. It must use this exact name and sit beside `install-ai-node.ps1`.
 
 ## Manual step: generating the `.ovpn` profile by hand

@@ -67,6 +67,8 @@ $OllamaManagerSourcePath = Join-Path $PSScriptRoot "manage-ai-node-ollama.ps1"
 $OllamaManagerInstallPath = Join-Path $InstallDir "manage-ai-node-ollama.ps1"
 $NodeConsoleSourcePath = Join-Path $PSScriptRoot "node-console.ps1"
 $NodeConsoleInstallPath = Join-Path $InstallDir "node-console.ps1"
+$NodeConsoleIconSourcePath = Join-Path $PSScriptRoot "node-console-icon.ico"
+$NodeConsoleIconInstallPath = Join-Path $InstallDir "node-console-icon.ico"
 $VpnApiHostAddress = "192.168.1.59"
 $HeartbeatTaskName = "FitzNetNodeHeartbeat"
 $OllamaTaskName = "FitzNetOllamaServe"
@@ -100,6 +102,9 @@ if (-not (Test-Path $OllamaManagerSourcePath)) {
 }
 if (-not (Test-Path $NodeConsoleSourcePath)) {
     throw "node-console.ps1 was not found next to the installer. Re-download the complete installer package."
+}
+if (-not (Test-Path $NodeConsoleIconSourcePath)) {
+    throw "node-console-icon.ico was not found next to the installer. Re-download the complete installer package."
 }
 . $NetworkHelperSourcePath
 
@@ -490,6 +495,7 @@ Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
 Copy-Item -Path $NetworkHelperSourcePath -Destination $NetworkHelperInstallPath -Force
 Copy-Item -Path $NodeConsoleSourcePath -Destination $NodeConsoleInstallPath -Force
+Copy-Item -Path $NodeConsoleIconSourcePath -Destination $NodeConsoleIconInstallPath -Force
 Copy-Item -Path $OllamaManagerSourcePath -Destination $OllamaManagerInstallPath -Force
 if ($installVpn) {
     Copy-Item -Path $VpnManagerSourcePath -Destination $VpnManagerInstallPath -Force
@@ -528,6 +534,7 @@ if (Test-Path -LiteralPath (Split-Path -Parent $consoleShortcutPath)) {
     }
     $shortcut.WorkingDirectory = $InstallDir
     $shortcut.Description = "Fitz-Net AI node status and VPN controls"
+    $shortcut.IconLocation = "$NodeConsoleIconInstallPath,0"
     $shortcut.WindowStyle = 1
     $shortcut.Save()
     # WScript.Shell does not expose the Shell Link RunAsUser flag. It is bit
