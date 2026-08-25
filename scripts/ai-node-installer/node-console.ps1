@@ -25,6 +25,7 @@ $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
 $NetworkHelperPath = Join-Path $PSScriptRoot "node-network.ps1"
 $VpnManagerPath = Join-Path $PSScriptRoot "manage-ai-node-vpn.ps1"
+$OllamaManagerPath = Join-Path $PSScriptRoot "manage-ai-node-ollama.ps1"
 $HeartbeatPath = Join-Path $PSScriptRoot "heartbeat.ps1"
 $WebsiteSourceAddresses = @("192.168.1.59", "10.180.53.1")
 $OpenVpnServiceName = "OpenVPNService"
@@ -123,6 +124,21 @@ function Invoke-VpnControl {
     }
 }
 
+function Invoke-OllamaControl {
+    param([ValidateSet("Start", "Stop")][string]$Action)
+
+    if (-not (Test-Path $OllamaManagerPath)) {
+        throw "Ollama manager is missing. Re-run install-ai-node.ps1 to repair this node."
+    }
+
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$OllamaManagerPath`" -Action $Action"
+    $process = Start-Process -FilePath "powershell.exe" -Verb RunAs `
+        -ArgumentList $arguments -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "Ollama $Action failed with exit code $($process.ExitCode)."
+    }
+}
+
 function Write-StatusValue {
     param(
         [string]$Label,
@@ -179,6 +195,8 @@ function Write-NodeConsole {
     }
 
     Write-Host ""
+    Write-Host "  [O] Start Ollama   " -NoNewline -ForegroundColor Green
+    Write-Host "[X] Stop Ollama" -ForegroundColor Yellow
     Write-Host "  [C] Connect VPN   " -NoNewline -ForegroundColor Green
     Write-Host "[D] Disconnect VPN   " -NoNewline -ForegroundColor Yellow
     Write-Host "[R] Refresh   " -NoNewline -ForegroundColor Cyan
@@ -282,6 +300,24 @@ do {
             if ([Console]::KeyAvailable) {
                 $key = [Console]::ReadKey($true).Key
                 switch ($key) {
+                    "O" {
+                        Add-ConsoleActivity "Starting Ollama - approve the UAC prompt" "Yellow"
+                        try {
+                            Invoke-OllamaControl -Action Start
+                            Add-ConsoleActivity "Ollama started" "Green"
+                        } catch {
+                            Add-ConsoleActivity "Ollama start failed: $($_.Exception.Message)" "Red"
+                        }
+                    }
+                    "X" {
+                        Add-ConsoleActivity "Stopping Ollama - approve the UAC prompt" "Yellow"
+                        try {
+                            Invoke-OllamaControl -Action Stop
+                            Add-ConsoleActivity "Ollama stopped" "Green"
+                        } catch {
+                            Add-ConsoleActivity "Ollama stop failed: $($_.Exception.Message)" "Red"
+                        }
+                    }
                     "C" {
                         Add-ConsoleActivity "Connecting VPN - approve the UAC prompt" "Yellow"
                         try {

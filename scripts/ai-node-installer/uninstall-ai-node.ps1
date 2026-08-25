@@ -102,6 +102,43 @@ if ($ollamaTask) {
     Write-Skip "No Fitz-Net Ollama task found."
 }
 
+# Restore vendor startup entries only when this installer previously removed
+# them. Do not overwrite a startup entry the user or a later app update added.
+$ollamaStartupBackupPath = Join-Path $InstallDir "Ollama.lnk.disabled"
+if ($config -and $config.ollamaStartupShortcutPath -and (Test-Path -LiteralPath $ollamaStartupBackupPath)) {
+    $startupPath = [System.IO.Path]::GetFullPath([string]$config.ollamaStartupShortcutPath)
+    $expectedSuffix = "\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk"
+    if ($startupPath.StartsWith("C:\Users\", [System.StringComparison]::OrdinalIgnoreCase) -and
+        $startupPath.EndsWith($expectedSuffix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-Path -LiteralPath $startupPath)) {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $startupPath) -Force | Out-Null
+            Move-Item -LiteralPath $ollamaStartupBackupPath -Destination $startupPath
+            Write-Success "Restored Ollama's original sign-in shortcut."
+        } else {
+            Write-Skip "Ollama already has a sign-in shortcut; kept the current one."
+        }
+    }
+}
+
+if ($config -and $config.ollamaOwner -and $config.openVpnGuiStartupCommand) {
+    try {
+        $ownerSid = (New-Object System.Security.Principal.NTAccount([string]$config.ollamaOwner)).Translate(
+            [System.Security.Principal.SecurityIdentifier]
+        ).Value
+        $ownerRunPath = "Registry::HKEY_USERS\$ownerSid\Software\Microsoft\Windows\CurrentVersion\Run"
+        New-Item -Path $ownerRunPath -Force | Out-Null
+        $currentOpenVpnGui = Get-ItemPropertyValue -LiteralPath $ownerRunPath `
+            -Name "OpenVPN-GUI" -ErrorAction SilentlyContinue
+        if (-not $currentOpenVpnGui) {
+            New-ItemProperty -LiteralPath $ownerRunPath -Name "OpenVPN-GUI" `
+                -Value ([string]$config.openVpnGuiStartupCommand) -PropertyType String -Force | Out-Null
+            Write-Success "Restored OpenVPN GUI's original sign-in entry."
+        }
+    } catch {
+        Write-Host "    WARNING: could not restore the OpenVPN GUI sign-in entry: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
 # -- 4. Local node files ---------------------------------------------------------
 Write-Step "Removing local node files"
 if (Test-Path $InstallDir) {

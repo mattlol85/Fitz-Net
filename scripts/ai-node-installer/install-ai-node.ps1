@@ -37,13 +37,6 @@
     remote, off your LAN). Some people would rather not have OpenVPN
     installed on their PC at all.
 
-.PARAMETER AutoStartVpn
-    Whether the OpenVPN profile should connect automatically every time this
-    PC boots ("yes"/"no"). Only asked if -InstallVpn is "yes". The safe
-    default is "no": the tunnel starts disconnected and can be controlled
-    later with manage-ai-node-vpn.ps1. "yes" is an explicit opt-in that keeps
-    the VPN active in the background and reconnects it after every boot.
-
 .EXAMPLE
     .\install-ai-node.ps1 -Token "abc123..." -NodeName "brother-pc"
 #>
@@ -53,8 +46,7 @@ param(
     [string]$NodeName = $env:COMPUTERNAME,
     [string]$ApiBaseUrl = "https://api.fitznet.doomdns.org",
     [string]$OllamaAddress,
-    [string]$InstallVpn,
-    [string]$AutoStartVpn
+    [string]$InstallVpn
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +63,8 @@ $VpnManagerSourcePath = Join-Path $PSScriptRoot "manage-ai-node-vpn.ps1"
 $VpnManagerInstallPath = Join-Path $InstallDir "manage-ai-node-vpn.ps1"
 $OllamaLauncherSourcePath = Join-Path $PSScriptRoot "start-ollama.ps1"
 $OllamaLauncherInstallPath = Join-Path $InstallDir "start-ollama.ps1"
+$OllamaManagerSourcePath = Join-Path $PSScriptRoot "manage-ai-node-ollama.ps1"
+$OllamaManagerInstallPath = Join-Path $InstallDir "manage-ai-node-ollama.ps1"
 $NodeConsoleSourcePath = Join-Path $PSScriptRoot "node-console.ps1"
 $NodeConsoleInstallPath = Join-Path $InstallDir "node-console.ps1"
 $VpnApiHostAddress = "192.168.1.59"
@@ -100,6 +94,9 @@ if (-not (Test-Path $NetworkHelperSourcePath)) {
 }
 if (-not (Test-Path $OllamaLauncherSourcePath)) {
     throw "start-ollama.ps1 was not found next to the installer. Re-download the complete installer package."
+}
+if (-not (Test-Path $OllamaManagerSourcePath)) {
+    throw "manage-ai-node-ollama.ps1 was not found next to the installer. Re-download the complete installer package."
 }
 if (-not (Test-Path $NodeConsoleSourcePath)) {
     throw "node-console.ps1 was not found next to the installer. Re-download the complete installer package."
@@ -167,6 +164,16 @@ $interactiveProfilePath = $interactiveProfile.LocalPath
 $ollamaLogPath = Join-Path $interactiveProfilePath "AppData\Local\FitzNetNode\ollama.log"
 $consoleShortcutPath = Join-Path $interactiveProfilePath "Desktop\Fitz-Net AI Node Console.lnk"
 $windowsTerminalPath = Join-Path $interactiveProfilePath "AppData\Local\Microsoft\WindowsApps\wt.exe"
+$ollamaNativeStartupPath = Join-Path $interactiveProfilePath "AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk"
+$ollamaNativeStartupBackupPath = Join-Path $InstallDir "Ollama.lnk.disabled"
+$interactiveUserRunPath = "Registry::HKEY_USERS\$interactiveSid\Software\Microsoft\Windows\CurrentVersion\Run"
+$openVpnGuiStartupCommand = if ($existingConfig -and $existingConfig.openVpnGuiStartupCommand) {
+    [string]$existingConfig.openVpnGuiStartupCommand
+} elseif (Test-Path -LiteralPath $interactiveUserRunPath) {
+    [string](Get-ItemPropertyValue -LiteralPath $interactiveUserRunPath -Name "OpenVPN-GUI" -ErrorAction SilentlyContinue)
+} else {
+    ""
+}
 $ollamaExecutable = $null
 $ollamaCandidates = @(
     (Join-Path $interactiveProfilePath "AppData\Local\Programs\Ollama\ollama.exe"),
@@ -240,73 +247,56 @@ if (-not $installVpn) {
     }
 }
 
+# -- 2a. Disable vendor-created logon entries -----------------------------------
+Write-Step "Disabling automatic tray-app startup"
+if (Test-Path -LiteralPath $ollamaNativeStartupPath -PathType Leaf) {
+    if (Test-Path -LiteralPath $ollamaNativeStartupBackupPath -PathType Leaf) {
+        Remove-Item -LiteralPath $ollamaNativeStartupPath -Force
+    } else {
+        Move-Item -LiteralPath $ollamaNativeStartupPath -Destination $ollamaNativeStartupBackupPath -Force
+    }
+    Write-Success "Disabled Ollama's native sign-in shortcut (backed up for uninstall)."
+} elseif (Test-Path -LiteralPath $ollamaNativeStartupBackupPath -PathType Leaf) {
+    Write-Skip "Ollama's native sign-in shortcut is already disabled."
+} else {
+    Write-Skip "Ollama did not install a native sign-in shortcut."
+}
+
+if ($installVpn -and (Test-Path -LiteralPath $interactiveUserRunPath)) {
+    if (-not $openVpnGuiStartupCommand) {
+        $openVpnGuiStartupCommand = [string](Get-ItemPropertyValue -LiteralPath $interactiveUserRunPath `
+            -Name "OpenVPN-GUI" -ErrorAction SilentlyContinue)
+    }
+    Remove-ItemProperty -LiteralPath $interactiveUserRunPath -Name "OpenVPN-GUI" -ErrorAction SilentlyContinue
+    Write-Success "Disabled OpenVPN GUI's native sign-in entry (the VPN service remains Manual)."
+} else {
+    Write-Skip "No OpenVPN GUI sign-in entry needed changing."
+}
+
 # -- 3. OpenVPN profile ---------------------------------------------------------
 Write-Step "Installing OpenVPN profile"
 if (-not $installVpn) {
     Write-Skip "Skipped - you opted out of OpenVPN for this PC."
     Write-Skip "The node still registers and works for local/LAN chat routing without it."
 } else {
-    if (-not $AutoStartVpn) {
-        Write-Host "    The recommended default is NO: the VPN stays off until you run the control script." -ForegroundColor Yellow
-        Write-Host "    YES keeps the VPN active in the background and reconnects it automatically after every boot." -ForegroundColor Yellow
-        $AutoStartVpn = Read-Host "Enable VPN auto-start? Type yes to opt in, or press Enter for no"
+    New-Item -ItemType Directory -Force -Path $OpenVpnConfigDir | Out-Null
+    $destOvpn = Join-Path $OpenVpnConfigDir "fitznet-node.ovpn"
+    Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
+    Set-SplitTunnelProfile -ProfilePath $destOvpn -ApiHostAddress $VpnApiHostAddress
+    $autoProfilePath = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
+    if (Test-Path $autoProfilePath) {
+        Remove-Item -Path $autoProfilePath -Force
     }
-    $autoStart = $AutoStartVpn -match '^(y|yes)$'
-
-    if ($autoStart) {
-        Write-Host "    WARNING: VPN auto-start explicitly enabled; the tunnel will stay active and reconnect after boot." -ForegroundColor Yellow
-        New-Item -ItemType Directory -Force -Path $OpenVpnConfigAutoDir | Out-Null
-        $destOvpn = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
-        Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
-        Set-SplitTunnelProfile -ProfilePath $destOvpn -ApiHostAddress $VpnApiHostAddress
-        Remove-Item -Path (Join-Path $OpenVpnConfigDir "fitznet-node.ovpn") -Force -ErrorAction SilentlyContinue
-        Write-Success "Installed a split-tunnel profile at $destOvpn (auto-connects as a service on boot)."
-
-        $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
-        if ($service) {
-            Set-Service -Name "OpenVPNService" -StartupType Automatic
-            if ($service.Status -ne "Running") {
-                Start-Service -Name "OpenVPNService"
-            } else {
-                Restart-Service -Name "OpenVPNService"
-            }
-            Write-Success "OpenVPN service is running and set to start automatically."
-
-            # Give the tunnel time to establish. An auto-start VPN node must
-            # not register against a LAN fallback if this connection fails.
-            $vpnUp = $false
-            for ($i = 0; $i -lt 15; $i++) {
-                Start-Sleep -Seconds 2
-                if (Get-VpnIPv4Address) { $vpnUp = $true; break }
-            }
-            if ($vpnUp) {
-                Write-Success "VPN tunnel is up."
-            } else {
-                throw "The VPN tunnel did not receive an IPv4 address within 30 seconds. Check the OpenVPN service/logs, then re-run this installer. The node was not registered."
-            }
-        } else {
-            throw "OpenVPNService was not found after installing OpenVPN. Reboot once, then re-run this installer. The node was not registered."
+    $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
+    if ($service) {
+        if ($service.Status -ne "Stopped") {
+            Stop-Service -Name "OpenVPNService" -Force
         }
-    } else {
-        New-Item -ItemType Directory -Force -Path $OpenVpnConfigDir | Out-Null
-        $destOvpn = Join-Path $OpenVpnConfigDir "fitznet-node.ovpn"
-        Copy-Item -Path $OvpnSourcePath -Destination $destOvpn -Force
-        Set-SplitTunnelProfile -ProfilePath $destOvpn -ApiHostAddress $VpnApiHostAddress
-        $autoProfilePath = Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn"
-        if (Test-Path $autoProfilePath) {
-            Remove-Item -Path $autoProfilePath -Force
-        }
-        $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
-        if ($service) {
-            if ($service.Status -ne "Stopped") {
-                Stop-Service -Name "OpenVPNService" -Force
-            }
-            Set-Service -Name "OpenVPNService" -StartupType Manual
-        }
-        Write-Success "Installed a split-tunnel profile at $destOvpn with the VPN disconnected and startup disabled."
-        Write-Host "    To connect later: run C:\ProgramData\FitzNetNode\manage-ai-node-vpn.ps1 as Administrator." -ForegroundColor Yellow
-        Write-Host "    This node will report OFFLINE until the VPN is connected." -ForegroundColor Yellow
+        Set-Service -Name "OpenVPNService" -StartupType Manual
     }
+    Write-Success "Installed a split-tunnel profile at $destOvpn with the VPN disconnected and startup disabled."
+    Write-Host "    Use the Fitz-Net node console when you want to connect it." -ForegroundColor Yellow
+    Write-Host "    This node will report OFFLINE until the VPN and Ollama are started." -ForegroundColor Yellow
 }
 
 # -- 4. Best-effort GPU detection --------------------------------------------
@@ -332,24 +322,23 @@ $env:OLLAMA_HOST = "0.0.0.0"
 Copy-Item -Path $OllamaLauncherSourcePath -Destination $OllamaLauncherInstallPath -Force
 Write-Success "Updated the Ollama background launcher."
 
-Write-Host "    Replacing the Ollama startup task..." -ForegroundColor DarkGray
+Write-Host "    Replacing the manual Ollama task..." -ForegroundColor DarkGray
 $ollamaAction = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$OllamaLauncherInstallPath`" -OllamaExecutable `"$ollamaExecutable`" -LogPath `"$ollamaLogPath`""
-$ollamaTrigger = New-ScheduledTaskTrigger -AtLogOn -User $interactiveUser
 $ollamaPrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
 $ollamaSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650) `
-    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+    -ExecutionTimeLimit (New-TimeSpan -Days 3650)
 $existingOllamaTask = Get-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
 if ($existingOllamaTask) {
     Stop-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $OllamaTaskName -Confirm:$false -ErrorAction Stop
 }
-Register-ScheduledTask -TaskName $OllamaTaskName -Action $ollamaAction -Trigger $ollamaTrigger `
+Register-ScheduledTask -TaskName $OllamaTaskName -Action $ollamaAction `
     -Principal $ollamaPrincipal -Settings $ollamaSettings -Force -ErrorAction Stop | Out-Null
 
 Write-Host "    Stopping the previous Ollama process..." -ForegroundColor DarkGray
 Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Write-Success "Set OLLAMA_HOST=0.0.0.0 and configured Ollama to run as $interactiveUser."
+Write-Success "Set OLLAMA_HOST=0.0.0.0 and configured manual Ollama control for $interactiveUser."
 
 Start-Sleep -Seconds 1
 Write-Host "    Starting Ollama and waiting up to 30 seconds for its API..." -ForegroundColor DarkGray
@@ -473,6 +462,8 @@ if (Test-Path $NodeConfigPath) {
         ollamaOwner = $interactiveUser
         ollamaLogPath = $ollamaLogPath
         consoleShortcutPath = $consoleShortcutPath
+        ollamaStartupShortcutPath = $ollamaNativeStartupPath
+        openVpnGuiStartupCommand = $openVpnGuiStartupCommand
     } | ConvertTo-Json
 
     Set-Content -Path $NodeConfigPath -Value $nodeConfig -Encoding UTF8
@@ -489,6 +480,8 @@ $nodeConfig | Add-Member -NotePropertyName ollamaAddress `
 $nodeConfig | Add-Member -NotePropertyName ollamaOwner -NotePropertyValue $interactiveUser -Force
 $nodeConfig | Add-Member -NotePropertyName ollamaLogPath -NotePropertyValue $ollamaLogPath -Force
 $nodeConfig | Add-Member -NotePropertyName consoleShortcutPath -NotePropertyValue $consoleShortcutPath -Force
+$nodeConfig | Add-Member -NotePropertyName ollamaStartupShortcutPath -NotePropertyValue $ollamaNativeStartupPath -Force
+$nodeConfig | Add-Member -NotePropertyName openVpnGuiStartupCommand -NotePropertyValue $openVpnGuiStartupCommand -Force
 $nodeConfig | ConvertTo-Json | Set-Content -Path $NodeConfigPath -Encoding UTF8
 Write-Success "Saved routing mode '$addressMode' for future heartbeats."
 
@@ -497,6 +490,7 @@ Write-Step "Setting up recurring heartbeat"
 Copy-Item -Path (Join-Path $PSScriptRoot "heartbeat.ps1") -Destination $HeartbeatScriptPath -Force
 Copy-Item -Path $NetworkHelperSourcePath -Destination $NetworkHelperInstallPath -Force
 Copy-Item -Path $NodeConsoleSourcePath -Destination $NodeConsoleInstallPath -Force
+Copy-Item -Path $OllamaManagerSourcePath -Destination $OllamaManagerInstallPath -Force
 if ($installVpn) {
     Copy-Item -Path $VpnManagerSourcePath -Destination $VpnManagerInstallPath -Force
 }
@@ -504,6 +498,7 @@ if ($installVpn) {
 $existingConsoleTask = Get-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction SilentlyContinue
 if ($existingConsoleTask) {
     Stop-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $NodeConsoleTaskName -Confirm:$false -ErrorAction Stop
 }
 # A previous Explorer/Terminal launch outlives its short scheduled-task action.
 # Stop only consoles running our installed script so an installer re-run can
@@ -512,13 +507,12 @@ Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction Sil
     Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains($NodeConsoleInstallPath) } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 $consoleAction = New-ScheduledTaskAction -Execute "explorer.exe" -Argument "`"$consoleShortcutPath`""
-$consoleTrigger = New-ScheduledTaskTrigger -AtLogOn -User $interactiveUser
 $consolePrincipal = New-ScheduledTaskPrincipal -UserId $interactiveUser -LogonType Interactive -RunLevel Limited
 $consoleSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Days 3650)
-Register-ScheduledTask -TaskName $NodeConsoleTaskName -Action $consoleAction -Trigger $consoleTrigger `
+    -ExecutionTimeLimit (New-TimeSpan -Days 3650)
+Register-ScheduledTask -TaskName $NodeConsoleTaskName -Action $consoleAction `
     -Principal $consolePrincipal -Settings $consoleSettings -Force -ErrorAction Stop | Out-Null
-Write-Success "Configured the visible node console to open for $interactiveUser at sign-in."
+Write-Success "Configured the node console for manual launch by $interactiveUser."
 
 if (Test-Path -LiteralPath (Split-Path -Parent $consoleShortcutPath)) {
     $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($consoleShortcutPath)
@@ -555,17 +549,23 @@ if ($existingTask) {
     Write-Success "Scheduled task '$HeartbeatTaskName' created (runs every 2 minutes)."
 }
 
+Write-Step "Leaving the node runtime off"
+Stop-ScheduledTask -TaskName $OllamaTaskName -ErrorAction SilentlyContinue
+Get-Process -Name "ollama*" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Write-Success "Ollama is stopped and has no startup trigger."
+if ($installVpn) {
+    Write-Success "The VPN is stopped and its Windows service remains Manual."
+}
+
 Write-Step "Sending initial readiness heartbeat"
 & $HeartbeatScriptPath
-Write-Success "Reported the node's current chat readiness."
+Write-Success "Reported the node OFFLINE until the user starts it from the console."
 
 Write-Step "Done"
 Write-Host "    This machine is now registered as a Fitz-Net AI node." -ForegroundColor Green
 Write-Host "    Check the Status tab at fitznet.org to see it come online." -ForegroundColor Green
-if ($installVpn -and -not $autoStart) {
-    Write-Host "    VPN is OFF and will stay off after reboot. Run the installed VPN control script when you want to make this node available." -ForegroundColor Yellow
-}
-Write-Host "    The status console opens now and at sign-in; it never connects the VPN automatically." -ForegroundColor Cyan
+Write-Host "    Ollama and the VPN are OFF and will stay off after reboot." -ForegroundColor Yellow
+Write-Host "    The status console opens now. Later, use its desktop shortcut to start the node manually." -ForegroundColor Cyan
 try {
     Start-ScheduledTask -TaskName $NodeConsoleTaskName -ErrorAction Stop
 } catch {

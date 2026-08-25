@@ -1,6 +1,6 @@
 # AI node installer (Windows)
 
-This is what you package up and send to someone contributing a GPU (e.g. your brother's PC) so it registers itself as a Fitz-Net AI worker node. It installs Ollama, installs/connects the OpenVPN client, and registers with `fitz-net-api`. Not auto-synced anywhere — this directory is the source of truth; you assemble a zip from it each time you enroll a new node.
+This is what you package up and send to someone contributing a GPU (e.g. your brother's PC) so it registers itself as a Fitz-Net AI worker node. It installs Ollama, configures the OpenVPN client for manual use, and registers with `fitz-net-api`. Not auto-synced anywhere — this directory is the source of truth; you assemble a zip from it each time you enroll a new node.
 
 ## What you do (once per new node)
 
@@ -20,7 +20,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
    - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
-3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, `manage-ai-node-vpn.ps1`, `start-ollama.ps1`, `node-console.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller and control scripts gives the node owner everything needed without another download.
+3. **Zip it up** (only needed for the manual path — the workflow does this for you). Select `install-ai-node.ps1`, `uninstall-ai-node.ps1`, `heartbeat.ps1`, `node-network.ps1`, `manage-ai-node-vpn.ps1`, `manage-ai-node-ollama.ps1`, `start-ollama.ps1`, `node-console.ps1`, and `node.ovpn`, and compress them into one `.zip` (e.g. `fitz-net-ai-node.zip`) — including the uninstaller and control scripts gives the node owner everything needed without another download.
 
 4. **Send the zip to the node owner**, along with the enrollment token from step 1 (send the token through a separate channel, not inside the zip — it's a one-time credential).
 
@@ -29,10 +29,9 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 1. Unzip the package anywhere.
 2. Right-click `install-ai-node.ps1` → **Run with PowerShell** (as Administrator — the script requires it). If prompted, paste in the enrollment token you sent them.
 3. It'll ask whether to install/connect OpenVPN on this PC at all — say **yes** if this node isn't on your own home LAN (e.g. a family member's PC elsewhere), since the VPN is the only way `fitz-net-api` can reach it to route chat prompts. If the node *is* on your LAN, "no" is fine — it still registers and works for local chat routing without it.
-4. If they said yes, the safe default is for the VPN to remain **off** and not start with Windows. Press Enter at the auto-start prompt to keep this default. Typing "yes" explicitly enables an always-on background tunnel and shows a warning.
-5. Wait for "This machine is now registered as a Fitz-Net AI node."
+4. Wait for "This machine is now registered as a Fitz-Net AI node."
 
-That's it — Ollama is installed for the signed-in model owner if missing, then restarted under that same account with `OLLAMA_HOST=0.0.0.0`. The `FitzNetOllamaServe` task starts it again whenever that owner logs on, without using the elevated administrator's empty model directory. The installer waits up to 30 seconds for Ollama's API and stops with an actionable error if it cannot start. A second scheduled task heartbeats the node every 2 minutes. Port 11434 is opened either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. A node reports `ONLINE` only while Ollama has a model and its selected route is usable. The visible Fitz-Net console opens after installation and at sign-in; it reports the real tunnel status and never connects the VPN automatically. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.
+That's it — Ollama is installed for the signed-in model owner if missing and configured with `OLLAMA_HOST=0.0.0.0`. The installer briefly starts it under that owner to verify the API and models, then stops it before completing. `FitzNetOllamaServe` is a demand-only task with no logon or boot trigger. OpenVPN is also left disconnected with its service set to Manual. Vendor-created Ollama and OpenVPN GUI sign-in entries are backed up and disabled, so they cannot bypass this manual policy. The node owner starts and stops both from the desktop console. A lightweight scheduled heartbeat still runs every 2 minutes so the website promptly reflects `ONLINE` or `OFFLINE`; it does not load Ollama, the model, GPU, or VPN. Port 11434 is opened either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.
 
 If VPN installation is selected, `node.ovpn` is required. The installer rewrites it as a narrow split tunnel: only traffic to the API host (`192.168.1.59`) uses OpenVPN, never the node owner's general internet traffic. A manually controlled node remains `OFFLINE` until its owner connects the VPN.
 
@@ -50,15 +49,15 @@ Connect starts the VPN for the current Windows session but leaves the OpenVPN se
 
 ## Live node console
 
-The installer opens a colored PowerShell console and creates a **Fitz-Net AI Node Console** desktop shortcut. It opens again when the model owner signs in, but it never turns on the VPN by itself. The console shows the authoritative VPN adapter address, OpenVPN service/startup state, Ollama health, installed models, active website calls, and recent chat activity. This avoids confusion with OpenVPN GUI, whose tray menu may still say **Connect** because the Fitz-Net profile is controlled by the Windows service instead of that GUI session.
+The installer opens a colored PowerShell console and creates a **Fitz-Net AI Node Console** desktop shortcut. Nothing is added to Windows logon: after a reboot, the owner opens this shortcut when they want to use the node. The console shows the authoritative VPN adapter address, OpenVPN service/startup state, Ollama health, installed models, active website calls, and recent chat activity. This avoids confusion with OpenVPN GUI, whose tray menu may still say **Connect** because the Fitz-Net profile is controlled by the Windows service instead of that GUI session.
 
-Use **C** to connect the VPN, **D** to disconnect it, **R** to refresh, and **Q** to close only the console. Connect and Disconnect display a normal Windows UAC prompt. Closing the console does not stop Ollama or change the VPN state.
+Use **O** to start Ollama, **X** to stop Ollama, **C** to connect the VPN, **D** to disconnect it, **R** to refresh, and **Q** to close only the console. Start, Stop, Connect, and Disconnect display a normal Windows UAC prompt. Closing the console does not stop Ollama or change the VPN state.
 
 The console records request metadata only: arrival time, completion status, and duration. Prompt and response content are never shown or written to its activity display. Ollama's access log is rotated at 10 MB and retained as one previous file under the model owner's local application-data directory.
 
 ## Removing a node
 
-Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregisters the node from `fitz-net-api` (so it stops showing up on the Status page), removes the heartbeat scheduled task and `C:\ProgramData\FitzNetNode\`, reverts `OLLAMA_HOST` and removes the firewall rule opened for it, and removes any Fitz-Net OpenVPN profile files. It does **not** uninstall Ollama or the OpenVPN client themselves — only the Fitz-Net-specific configuration this installer added. Safe to re-run.
+Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregisters the node from `fitz-net-api` (so it stops showing up on the Status page), removes the heartbeat scheduled task and `C:\ProgramData\FitzNetNode\`, restores the vendor sign-in entries it backed up, reverts `OLLAMA_HOST` and removes the firewall rule opened for it, and removes any Fitz-Net OpenVPN profile files. It does **not** uninstall Ollama or the OpenVPN client themselves — only the Fitz-Net-specific configuration this installer added. Safe to re-run.
 
 ## Files
 
@@ -67,7 +66,8 @@ Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregister
 - `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates.
 - `node-network.ps1` — shared route detection used by the installer and heartbeat; it is copied beside the installed heartbeat.
 - `manage-ai-node-vpn.ps1` — explicit Connect/Disconnect/Status control for a manually managed VPN.
-- `start-ollama.ps1` — runs Ollama with remote access under the signed-in model owner's Windows account; installed as the `FitzNetOllamaServe` logon task.
+- `manage-ai-node-ollama.ps1` — explicit Start/Stop/Status control for Ollama and its demand-only scheduled task.
+- `start-ollama.ps1` — runs Ollama with remote access under the signed-in model owner's Windows account when manually requested.
 - `node-console.ps1` — colored live status, manual VPN controls, and privacy-safe website request activity.
 - `node.ovpn` — **not committed** (gitignored, per-node secret) — generated per step 2 above before zipping. It must use this exact name and sit beside `install-ai-node.ps1`.
 
