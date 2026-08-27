@@ -69,17 +69,27 @@ services:
       - fitz-net-api
 
   mongo:
-    image: mongo:4.4
+    # Bumped off EOL 4.4 (unsupported since Feb 2024) to the current 7.x series.
+    image: mongo:7.0
     container_name: fitz-net-api-mongo
     restart: unless-stopped
     environment:
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+      # Root credentials enable authentication. Set these in .env (see
+      # .env.example). The app services (fitz-net-api, gamerbell) must then
+      # authenticate — wire MONGO_USERNAME / MONGO_PASSWORD into their Spring
+      # config so the connection URI includes credentials and authSource=admin.
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - mongo_data:/data/db
     networks:
       - internal
+    # The API and GamerBell reach Mongo over the internal Docker network by
+    # service name; the host does not need 27017 on all interfaces. Bind to
+    # loopback only for local admin/debugging (removes LAN + container exposure).
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
 
   caddy:
     image: lucaslorentz/caddy-docker-proxy:latest
