@@ -16,7 +16,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
    Either way you get back `{"token": "...", "expiresAt": "..."}`. The token is valid for 30 minutes and can only be used once.
 
-2. **Get a client `.ovpn` profile.** Two ways:
+2. **Get a client `.ovpn` profile.** *Skip this whole step for a node on your own local network* — those install LAN-only and need no profile; the owner just runs `.\install-ai-node.ps1 -Lan`. Otherwise, two ways:
    - **Automated (recommended):** run the `generate-ai-node-package.yml` GitHub Actions workflow (`gh workflow run generate-ai-node-package.yml -f node-name=brother-pc`) — it generates the profile on your OpenVPN server via a restricted SSH key and hands you back a ready-to-send zip as a workflow artifact. Skip straight to step 4 if you use this path. See [`docs/openvpn-ai-node-handoff.md`](../../docs/openvpn-ai-node-handoff.md) for one-time setup.
    - **Manual:** generate it by hand on your existing OpenVPN server (see the handoff doc's fallback section) and save the resulting single-file profile as `node.ovpn` in this folder (same directory as `install-ai-node.ps1`).
 
@@ -28,7 +28,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
 1. Unzip the package anywhere.
 2. Right-click `install-ai-node.ps1` → **Run with PowerShell** (as Administrator — the script requires it). If prompted, paste in the enrollment token you sent them.
-3. It'll ask whether to install/connect OpenVPN on this PC at all — say **yes** if this node isn't on your own home LAN (e.g. a family member's PC elsewhere), since the VPN is the only way `fitz-net-api` can reach it to route chat prompts. If the node *is* on your LAN, "no" is fine — it still registers and works for local chat routing without it.
+3. **LAN node (same local network as `fitz-net-api`):** there's nothing to answer — run `.\install-ai-node.ps1 -Lan` (or just double-click when no `node.ovpn` is bundled) and it installs LAN-only. **Remote node** (e.g. a family member's PC elsewhere): the package includes a `node.ovpn`; the installer asks whether to install/connect OpenVPN — say **yes**, since the VPN is the only way `fitz-net-api` can reach it to route chat prompts. Pass `-InstallVpn yes` / `-InstallVpn no` to answer without the prompt (the value is required — `-InstallVpn` on its own is an error).
 4. Wait for "This machine is now registered as a Fitz-Net AI node."
 
 That's it — Ollama is installed for the signed-in model owner if missing and configured with `OLLAMA_HOST=0.0.0.0`. The installer briefly starts it under that owner to verify the API and models, then stops it before completing. `FitzNetOllamaServe` is a demand-only task with no logon or boot trigger. OpenVPN is also left disconnected with its service set to Manual. Vendor-created Ollama and OpenVPN GUI sign-in entries are backed up and disabled, so they cannot bypass this manual policy. The node owner starts and stops both from the desktop console. A lightweight scheduled heartbeat still runs every 2 minutes so the website promptly reflects `ONLINE` or `OFFLINE`; it does not load Ollama, the model, GPU, or VPN. Port 11434 is opened either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.

@@ -29,9 +29,17 @@
     and reused by every heartbeat. If omitted, the selected VPN or LAN route
     is detected each heartbeat.
 
+.PARAMETER Lan
+    Shortcut for a LAN-only node: skips the OpenVPN prompt and every OpenVPN
+    step entirely. Equivalent to -InstallVpn no. Use this for a machine that
+    lives on the same local network as fitz-net-api; no node.ovpn file is
+    needed next to the installer.
+
 .PARAMETER InstallVpn
-    Whether to install/configure OpenVPN on this PC at all ("yes"/"no"). If
-    omitted, you'll be asked up front. Choose "no" to skip OpenVPN entirely -
+    Whether to install/configure OpenVPN on this PC at all ("yes"/"no"). Takes
+    a value - pass it as "-InstallVpn no" or "-InstallVpn yes", not on its own.
+    If omitted, you'll be asked up front (and only when a node.ovpn profile is
+    actually present). Choose "no" to skip OpenVPN entirely -
     the node still registers and works for local/LAN chat routing either
     way; the VPN is groundwork for a later phase (reaching a node that's
     remote, off your LAN). Some people would rather not have OpenVPN
@@ -46,10 +54,19 @@ param(
     [string]$NodeName = $env:COMPUTERNAME,
     [string]$ApiBaseUrl = "https://api.fitznet.doomdns.org",
     [string]$OllamaAddress,
-    [string]$InstallVpn
+    [ValidateSet("yes", "no", "y", "n", "")]
+    [string]$InstallVpn,
+    [switch]$Lan
 )
 
 $ErrorActionPreference = "Stop"
+
+# Catch a switch typo'd as the first positional argument, e.g.
+# ".\install-ai-node.ps1 --InstallVpn" or "-Lan" pasted where the token goes -
+# PowerShell would otherwise silently treat it as the enrollment token.
+if ($Token -and $Token -match '^-') {
+    throw "'$Token' looks like a switch, not an enrollment token. For a LAN node on your local network run:  .\install-ai-node.ps1 -Lan"
+}
 
 $InstallDir = "C:\ProgramData\FitzNetNode"
 $NodeConfigPath = Join-Path $InstallDir "node.json"
@@ -114,6 +131,12 @@ if (Test-Path $NodeConfigPath) {
 }
 
 # -- 0. Choose the persistent routing mode ------------------------------------
+$ovpnBundlePresent = Test-Path $OvpnSourcePath
+
+if ($Lan) {
+    $InstallVpn = "no"
+}
+
 if (-not $InstallVpn) {
     if ($existingConfig -and $existingConfig.addressMode -eq "vpn") {
         $InstallVpn = "yes"
@@ -123,6 +146,11 @@ if (-not $InstallVpn) {
         $hasInstalledProfile = (Test-Path (Join-Path $OpenVpnConfigAutoDir "fitznet-node.ovpn")) -or
             (Test-Path (Join-Path $OpenVpnConfigDir "fitznet-node.ovpn"))
         $InstallVpn = if ($hasInstalledProfile) { "yes" } else { "no" }
+    } elseif (-not $ovpnBundlePresent) {
+        # No per-node OpenVPN profile shipped next to the installer: this is a
+        # LAN-only node. Don't ask a question the machine can't act on.
+        $InstallVpn = "no"
+        Write-Skip "No node.ovpn next to the installer - setting up a LAN-only node."
     } else {
         $InstallVpn = Read-Host "Install/connect the Fitz-Net OpenVPN profile on this PC? (yes/no)"
     }
@@ -135,7 +163,7 @@ if (-not $OllamaAddress -and $existingConfig -and $existingConfig.addressMode -e
 }
 
 if ($installVpn -and -not (Test-Path $OvpnSourcePath)) {
-    throw "VPN installation was selected, but node.ovpn is missing next to this script. Re-download a complete per-node package or re-run with -InstallVpn no for a LAN-only node."
+    throw "VPN installation was selected, but node.ovpn is missing next to this script. Re-download a complete per-node package, or re-run with -Lan for a node on your local network."
 }
 if ($installVpn -and -not (Test-Path $VpnManagerSourcePath)) {
     throw "VPN installation was selected, but manage-ai-node-vpn.ps1 is missing next to this script. Re-download the complete installer package."
