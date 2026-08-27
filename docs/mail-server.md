@@ -133,10 +133,16 @@ Add at your domain registrar:
 | A | `mail` | `<your public IP>` |
 | MX | `@` | `mail.fitznet.org` (priority 10) |
 | TXT | `@` | `v=spf1 mx ~all` |
-| TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:admin@fitznet.org` |
+| TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:admin@fitznet.org` |
 | TXT | `dkim._domainkey` | *(value from step 4)* |
 
 > If your FiOS IP is dynamic, keep TTL at 300s and update the `mail` A record whenever it changes.
+
+> **DMARC rollout:** publish `p=none` first and watch the `rua` aggregate
+> reports for a week or two to confirm every legitimate source (this server
+> *and* the Resend outbound relay) passes SPF/DKIM alignment. Once the
+> reports are clean, switch to `p=quarantine` (shown above) so spoofed mail
+> is filtered rather than just monitored, then to `p=reject` later.
 
 ### 6. Router Port Forwards
 
