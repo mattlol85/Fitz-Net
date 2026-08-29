@@ -34,7 +34,6 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       JWT_SECRET: ${JWT_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       MONGO_HOST: mongo
       MONGO_PORT: 27017
       MONGO_DATABASE: ${MONGO_DATABASE}
