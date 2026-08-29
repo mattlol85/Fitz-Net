@@ -6,8 +6,12 @@ services:
     volumes:
       - ./loki/config.yml:/etc/loki/config.yml:ro
       - loki-data:/loki
+    # Loki has auth_enabled: false and is only consumed by Grafana/Promtail over
+    # the Docker network. Bind the published port to loopback so it is reachable
+    # for local debugging on the host but not from the LAN or other containers'
+    # host interface. Remove this block entirely if host access is never needed.
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
     restart: unless-stopped
 
   grafana:
@@ -47,9 +51,12 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --web.enable-lifecycle
+      # --web.enable-lifecycle removed: it exposes an unauthenticated
+      # POST /-/reload (and /-/quit). Re-add only if hot config reload is needed.
+    # Prometheus UI has no authentication. Bind to loopback only so it is not
+    # reachable from the LAN or a compromised container via the host interface.
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus:/etc/prometheus:ro
       - prometheus-data:/prometheus
@@ -64,8 +71,11 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
+    # Exposes detailed per-container metrics and host info with no auth.
+    # Prometheus scrapes it over the Docker network (see prometheus.yml);
+    # bind the published port to loopback only.
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -76,8 +86,10 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
+    # Runs with pid: host and /:/host:ro — host metrics, no auth.
+    # Prometheus scrapes it over the Docker network; bind to loopback only.
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     pid: host
     command:
       - --path.rootfs=/host
