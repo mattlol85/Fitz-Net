@@ -11,10 +11,21 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:10.4.2
+    # Bumped from 10.4.2 (Apr 2024, multiple disclosed CVEs since) to a current
+    # 11.x release. Note: GET /api/health still discloses the version string
+    # unauthenticated — Grafana has no option to disable that — but staying on a
+    # patched release removes the known CVEs that version disclosure helps target.
+    image: grafana/grafana:11.6.0
     container_name: grafana
     expose:
       - "3000"
+    environment:
+      # Strong admin password from .env (see .env.example); no baked-in default.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # Grafana is internet-exposed at logs.fitznet.org — keep anonymous access
+      # and self-service signup off so the login page is the only way in.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
     labels:

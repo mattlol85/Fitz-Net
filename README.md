@@ -428,8 +428,9 @@ docker exec -ti mailserver setup config dkim
 **Observability stack** — run on the Docker host:
 ```sh
 cd observability
+cp .env.example .env   # then set GRAFANA_ADMIN_PASSWORD to a strong value
 docker compose up -d
-# Grafana UI available at https://logs.fitznet.org (default login: admin / admin)
+# Grafana UI available at https://logs.fitznet.org (login: admin / $GRAFANA_ADMIN_PASSWORD)
 ```
 
 See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
