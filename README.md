@@ -479,6 +479,34 @@ See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full l
 
 
 
+<!-- CLAUDE CODE -->
+## Claude Code agents & skills
+
+This hub ships custom [Claude Code](https://claude.com/claude-code) agents and skills for the cross-repo orchestration work this repo exists to do. They live in `.claude/`.
+
+**Agents** (`.claude/agents/`):
+
+| Agent | What it does |
+|---|---|
+| `repo-sweeper` | Read-only sweep of all six sibling repos — pulls each, lists open issues, returns a ranked table clustered by repo/theme/effort |
+| `pr-triage` | Scores every open PR across the six repos for merge confidence (diff size, CI, contract surfaces touched) and lists what is safe to auto-merge + tag |
+| `cross-repo-feature` | Implements a multi-repo feature per the numbered workflow in `.github/agents.md` — matching branches, API contract first, backend before frontend, linked PRs |
+| `release-conductor` | The merge → tag → deploy → handoff tail: verifies CI, merges, cuts semver tags, triggers Deploy to Proxmox, writes a prod handoff |
+
+**Skills** (`.claude/skills/`):
+
+| Skill | What it does |
+|---|---|
+| `sync-siblings` | Runs the mandatory six-repo `git pull` and prints a per-repo branch/ahead-behind/dirty summary |
+| `prod-handoff` | Template + checklist for the `docs/*-handoff.md` runbooks that live on the prod Proxmox VM |
+| `deploy-to-proxmox` | Documents the web-triggered deploy workflow, its `tag`/`latest` input, and post-deploy `/actuator/health` checks |
+| `local-fitznet` | Spin up / tear down the full local stack via `docker-compose.yml`, with the URLs to check |
+| `arch-visualize` | How the website's 3D architecture graph is built and updated — data model, node/link conventions, live preview |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+
 <!-- LICENSE -->
 ## License
 
