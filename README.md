@@ -264,6 +264,7 @@ Spring Boot 3.4 REST API and WebSocket backend. Features:
 |---|---|
 | `JWT_SECRET` | HS256 signing key |
 | `MONGO_HOST` / `MONGO_PORT` | MongoDB connection |
+| `MONGO_USERNAME` / `MONGO_PASSWORD` | MongoDB auth (match `MONGO_ROOT_*` in root `.env`; MongoDB now runs with authentication enabled) |
 | `MAIL_HOST` | SMTP host (`mail.fitznet.org`) |
 | `MAIL_USERNAME` | SMTP user (`noreply@fitznet.org`) |
 | `MAIL_PASSWORD` | SMTP password |
