@@ -56,6 +56,7 @@ Restart the Minecraft server after editing `server.properties`.
 | `/setwhitelistrole <role>` | Admin (Manage Server) | Choose which Discord role may use `/whitelist` |
 | `/setbotchannel` · `/getbotchannel` | Admin | Configure where milestone messages post |
 | `/joenet download` · `/joenet status` | Members | Search/queue movies & TV via Radarr/Sonarr |
+| `/joenet episodefix` | Members | Find a TV show already in the library, see which seasons have episodes missing a file, and re-trigger Sonarr's search for just those episodes |
 
 `/whitelist` is **role-gated**: only members holding the role set by `/setwhitelistrole` (admins always allowed) can add players. The username is validated against Minecraft's rules (`^[A-Za-z0-9_]{3,16}$`) before being sent, which also prevents RCON command injection.
 
