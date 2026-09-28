@@ -213,7 +213,7 @@ graph LR
 | Repo | Description |
 |---|---|
 | [Fitz-Net](https://github.com/mattlol85/Fitz-Net) | This repo — orchestration hub, architecture docs |
-| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | Spring Boot 3.4 REST API — user management, auth, encryption, email |
+| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | Spring Boot 3.4 REST API — user management, auth, email |
 | [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React 19 SPA — dashboard, live board, game stats, auth, password reset |
 | [GamerBell](https://github.com/mattlol85/GamerBell) | Spring Boot WebSocket relay + OTA firmware server for ESP32 bells |
 | [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | C++ / PlatformIO firmware for the physical ESP32 bell button |
@@ -253,7 +253,6 @@ Spring Boot 3.4 REST API and WebSocket backend. Features:
 - User management (register, login, JWT auth, profile update)
 - Overwatch 2 integration via OverFast API (player stats, ratings, history snapshots)
 - LiveBoard STOMP WebSocket for shared canvas state
-- AES encryption endpoints
 - **Password reset via email** — generates secure tokens, sends reset links via `noreply@fitznet.org`
 
 **Stack:** Java 21 · Spring Boot 3.4 · MongoDB · Spring Security (JWT/BCrypt) · Spring Mail · Gradle · Docker
