@@ -11,10 +11,22 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:10.4.2
+    # Latest stable release (was 10.4.2). GET /api/health still discloses the
+    # version string unauthenticated — Grafana has no option to disable that —
+    # so keep this on a current patched release.
+    image: grafana/grafana:13.2.3
     container_name: grafana
     expose:
       - "3000"
+    environment:
+      # Strong admin password from .env (see .env.example); no baked-in default.
+      # Only applied when Grafana first creates its DB — on an existing volume,
+      # rotate with `docker exec -it grafana grafana cli admin reset-admin-password`.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in observability/.env}
+      # Grafana is internet-exposed at logs.fitznet.org — keep anonymous access
+      # and self-service signup off so the login page is the only way in.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
     labels:
