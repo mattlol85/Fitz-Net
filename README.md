@@ -426,6 +426,8 @@ cd observability
 cp .env.example .env   # then set GRAFANA_ADMIN_PASSWORD to a strong value
 docker compose up -d
 # Grafana UI available at https://logs.fitznet.org (login: admin / $GRAFANA_ADMIN_PASSWORD)
+# GRAFANA_ADMIN_PASSWORD only applies on first start; on an existing install rotate it with:
+#   docker exec -it grafana grafana cli admin reset-admin-password '<new password>'
 ```
 
 See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
