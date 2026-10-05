@@ -363,9 +363,13 @@ See [`docs/mail-server.md`](docs/mail-server.md) for the full step-by-step setup
 
 <!-- BUILT WITH -->
 
-**User permissions:** users carry a set of permissions (`ADMIN`, `RADARR`, `SONARR`) that the website uses to show/hide tabs and that the API enforces. Manage them from the website `/admin` page (needs `ADMIN`) or the API, using either an admin user's JWT or the `X-Admin-Key` header:
+**User permissions:** users carry a set of permissions that the website uses to show/hide tabs and that the API enforces. Permissions are defined at runtime in MongoDB (`permissions` collection) — only `ADMIN` is built in and cannot be deleted. Create them first, then grant them. Manage them from the website `/admin` page (needs `ADMIN`) or the API, using either an admin user's JWT or the `X-Admin-Key` header:
 
 ```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://<api>/admin/permissions
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -X POST \
+     -d '{"name":"RADARR","description":"Radarr tab"}' https://<api>/admin/permissions
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -X DELETE https://<api>/admin/permissions/RADARR   # also revokes from all users
 curl -H "X-Admin-Key: $ADMIN_API_KEY" https://<api>/admin/users
 curl -H "X-Admin-Key: $ADMIN_API_KEY" -X POST   https://<api>/admin/users/<user>/permissions/RADARR
 curl -H "X-Admin-Key: $ADMIN_API_KEY" -X DELETE https://<api>/admin/users/<user>/permissions/RADARR
