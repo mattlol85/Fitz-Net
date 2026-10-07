@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__idea__get_run_configurations",
+      "Read(//c/Users/Matt/IdeaProjects/fitz-net-website/**)",
+      "Bash(npm install *)"
+    ]
+  }
+}
