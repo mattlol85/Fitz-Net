@@ -263,6 +263,7 @@ Spring Boot 3.4 REST API and WebSocket backend. Features:
 | Variable | Purpose |
 |---|---|
 | `JWT_SECRET` | HS256 signing key |
+| `ADMIN_API_KEY` | Optional. Enables the `X-Admin-Key` header for managing user permissions (see below); unset disables it |
 | `MONGO_HOST` / `MONGO_PORT` | MongoDB connection |
 | `MONGO_USERNAME` / `MONGO_PASSWORD` | MongoDB app-user credentials |
 | `MAIL_HOST` | SMTP host (`mail.fitznet.org`) |
@@ -361,6 +362,23 @@ See [`docs/mail-server.md`](docs/mail-server.md) for the full step-by-step setup
 
 
 <!-- BUILT WITH -->
+
+**User permissions:** users carry a set of permissions that the website uses to show/hide tabs and that the API enforces. Permissions are defined at runtime in MongoDB (`permissions` collection) — only `ADMIN` is built in and cannot be deleted. Create them first, then grant them. Manage them from the website `/admin` page (needs `ADMIN`) or the API, using either an admin user's JWT or the `X-Admin-Key` header:
+
+```bash
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://<api>/admin/permissions
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -X POST \
+     -d '{"name":"RADARR","description":"Radarr tab"}' https://<api>/admin/permissions
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -X DELETE https://<api>/admin/permissions/RADARR   # also revokes from all users
+curl -H "X-Admin-Key: $ADMIN_API_KEY" https://<api>/admin/users
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -X POST   https://<api>/admin/users/<user>/permissions/RADARR
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -X DELETE https://<api>/admin/users/<user>/permissions/RADARR
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -X PUT \
+     -d '{"permissions":["RADARR","SONARR"]}' https://<api>/admin/users/<user>/permissions
+```
+
+There is no seeded admin; grant `ADMIN` to the first user with the API key.
+
 ## Built With
 
 * [![React][React]][React-url]
