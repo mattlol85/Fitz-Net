@@ -198,6 +198,19 @@ chore(subject): description
 
 ---
 
+## Specialized Agents and Skills
+
+Defined in `.claude/` of this repo.
+
+| Name | Type | Purpose |
+|---|---|---|
+| `java-spring-agent` | agent | Java 21 / Spring Boot: fitz-net-api, GamerBell, Fitz-Bot |
+| `react-frontend-agent` | agent | React 19 / Vite: fitz-net-website |
+| `esp32-cpp-agent` | agent | C++ / PlatformIO: Esp32FitznetBell |
+| `vulnScan` | skill | Language-agnostic CVE scan, package update, compile/test verification. Called by every agent; leaves changes uncommitted |
+
+---
+
 ## Reference: Existing fitz-net-api Endpoints
 
 | Method | Path | Auth | Request Body | Response |
