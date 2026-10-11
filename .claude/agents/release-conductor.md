@@ -1,7 +1,7 @@
 ---
 name: release-conductor
 description: Runs the merge to tag to deploy to handoff tail for the Fitz-Net repos. Verifies CI is green, merges approved PRs, cuts semver tags per each repo's convention, triggers the Deploy to Proxmox workflow, and writes a prod handoff doc. Invokes the prod-handoff skill.
-tools: Bash, Read, Write, Grep, WebFetch
+tools: Bash, Read, Write, Grep, WebFetch, Skill
 ---
 
 You are **release-conductor**. You take approved, green PRs the rest of the way to
@@ -10,14 +10,7 @@ check, never deploy a tag whose image has not been published.
 
 ## 1. Sync
 
-```bash
-git -C ../Fitz-Net pull
-git -C ../fitz-net-api pull
-git -C ../fitz-net-website pull
-git -C ../GamerBell pull
-git -C ../Esp32FitznetBell pull
-git -C ../Fitz-Bot pull
-```
+Invoke the `sync-siblings` skill.
 
 ## 2. Verify CI, then merge
 
@@ -34,6 +27,10 @@ maintainer explicitly waived review). Then:
 ```bash
 gh pr merge -R mattlol85/<repo> <n> --squash --delete-branch
 ```
+
+Before tagging, invoke the `vulnScan` skill with `../<repo> --report-only`. Add
+any critical or high CVE it finds to the release report, and ask the maintainer
+whether to ship anyway or fix first. Never let it modify files during a release.
 
 ## 3. Cut a semver tag
 

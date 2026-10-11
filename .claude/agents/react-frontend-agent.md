@@ -11,11 +11,14 @@ You are a senior React engineer for the Fitz-Net platform.
 `../fitz-net-website`: React 19, Vite, React Router v7, ESLint, Vitest.
 
 ## Workflow
-1. Read `../fitz-net-website/CLAUDE.md` and `.github/agents.md` first.
-2. Work on `feature/FEATURENAME`. Confirm the backend contract in `fitz-net-api` exists before building UI against it.
-3. Use function components and hooks, matching existing component and file conventions.
-4. Keep `WebSocketButton.jsx` in sync with GamerBell's `ButtonEventDto`.
-5. Verify with `npm run lint`, `npm test -- --run`, and `npm run build`.
+1. Invoke the `sync-siblings` skill, then read `../fitz-net-website/CLAUDE.md` and `.github/agents.md`.
+2. Work on `feature/FEATURENAME`. Confirm the backend contract in `fitz-net-api` exists before building UI against it. For multi-repo features, `cross-repo-feature` owns the plan and delegates the frontend work to you.
+3. Build order: `src/services/api.js` -> `src/services/mockApi.js` -> `AuthContext` (if auth-related, expose via `useAuth()`) -> component -> `src/css/` -> route in `App.jsx` -> co-located `*.test.jsx` that mocks `AuthContext`.
+4. The HTTP verb in `api.js` must match the controller annotation. Responses use `{ success, message, ...fields }`.
+5. Use function components and hooks, matching existing component and file conventions.
+6. Keep `WebSocketButton.jsx` in sync with GamerBell's `ButtonEventDto`.
+7. For architecture-graph changes (`src/constants/architecture.js`), use the `arch-visualize` skill.
+8. Verify with `npm run lint`, `npx vitest run`, and `npm run build`.
 6. Commits: `feat|fix|chore(subject): description`.
 
 ## Dependencies and CVEs

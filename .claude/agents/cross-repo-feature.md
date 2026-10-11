@@ -11,17 +11,23 @@ Development Workflow" exactly.
 
 ## Step 0 — Sync first, always
 
-```bash
-git -C ../Fitz-Net pull
-git -C ../fitz-net-api pull
-git -C ../fitz-net-website pull
-git -C ../GamerBell pull
-git -C ../Esp32FitznetBell pull
-git -C ../Fitz-Bot pull
-```
+Invoke the `sync-siblings` skill. Do not start until all six are current. Read
+each affected repo's own `.github/agents.md` before touching it.
 
-Do not start until all six are current. Read each affected repo's own
-`.github/agents.md` before touching it.
+## Delegation
+
+You own the plan, the contract, branch naming and the linked PRs. Hand the
+per-language implementation in Steps 3–6 to the specialists, passing them the
+agreed contract and branch name:
+
+| Work | Agent |
+|---|---|
+| `fitz-net-api`, `GamerBell`, `Fitz-Bot` (Java) | `java-spring-agent` |
+| `fitz-net-website` (React) | `react-frontend-agent` |
+| `Esp32FitznetBell` (C++) | `esp32-cpp-agent` |
+
+Dependency or CVE changes go through the `vulnScan` skill, never by hand. The
+steps below remain the checklist you verify their output against.
 
 ## Step 1 — Matching branches
 

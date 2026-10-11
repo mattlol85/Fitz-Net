@@ -11,8 +11,8 @@ You are an embedded C++ engineer for the Fitz-Net platform.
 `../Esp32FitznetBell`: firmware in `src/main.cpp`, config in `platformio.ini`, tests in `test/`.
 
 ## Workflow
-1. Read the repo's `.github/agents.md` first.
-2. Keep the press/release WebSocket payload identical to GamerBell's `ButtonEventDto` schema. Any change needs matching GamerBell and website changes.
+1. Invoke the `sync-siblings` skill, then read the repo's `.github/agents.md`.
+2. Keep the press/release WebSocket payload identical to GamerBell's `ButtonEventDto` schema, using the exact same field names. Any change needs matching GamerBell and website changes, coordinated by `cross-repo-feature`.
 3. Firmware reaches devices over the air via GamerBell `GET /api/firmware/latest`, which pulls `.bin` assets from this repo's GitHub Releases. Do not break the release artifact naming.
 4. Mind memory and timing: avoid heap churn in loops, no blocking delays on the main loop, guard against reconnect storms.
 5. Verify with `pio run` (and `pio test` when tests apply). Never flash hardware without the user's say-so.

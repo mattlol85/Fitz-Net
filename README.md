@@ -514,6 +514,9 @@ This hub ships custom [Claude Code](https://claude.com/claude-code) agents and s
 | `pr-triage` | Scores every open PR across the six repos for merge confidence (diff size, CI, contract surfaces touched) and lists what is safe to auto-merge + tag |
 | `cross-repo-feature` | Implements a multi-repo feature per the numbered workflow in `.github/agents.md` — matching branches, API contract first, backend before frontend, linked PRs |
 | `release-conductor` | The merge → tag → deploy → handoff tail: verifies CI, merges, cuts semver tags, triggers Deploy to Proxmox, writes a prod handoff |
+| `java-spring-agent` | Java 21 / Spring Boot specialist for `fitz-net-api`, `GamerBell`, `Fitz-Bot` |
+| `react-frontend-agent` | React 19 / Vite specialist for `fitz-net-website` |
+| `esp32-cpp-agent` | C++ / PlatformIO specialist for `Esp32FitznetBell` |
 
 **Skills** (`.claude/skills/`):
 
@@ -524,6 +527,7 @@ This hub ships custom [Claude Code](https://claude.com/claude-code) agents and s
 | `deploy-to-proxmox` | Documents the web-triggered deploy workflow, its `tag`/`latest` input, and post-deploy `/actuator/health` checks |
 | `local-fitznet` | Spin up / tear down the full local stack via `docker-compose.yml`, with the URLs to check |
 | `arch-visualize` | How the website's 3D architecture graph is built and updated — data model, node/link conventions, live preview |
+| `vulnScan` | Language-agnostic CVE scan (Gradle, npm, PlatformIO): upgrades vulnerable packages, verifies build + tests, leaves changes uncommitted. `--report-only` to just scan |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
