@@ -32,3 +32,24 @@ The command applies the route immediately, persists it as a systemd oneshot
 service, and uses the optional node address to verify `/api/tags` from the same
 host that runs `fitz-net-api`. It is idempotent and can be re-run if the VPN
 subnet or OpenVPN server address changes.
+
+## TeamSpeak auto-update
+
+TeamSpeak 6 beta builds carry a built-in license that expires, after which the server refuses to start. The `teamspeak/` stack therefore tracks `:latest` with `pull_policy: always`, and a systemd timer redeploys it nightly at about 04:30. The container is only recreated when a new image was actually pulled.
+
+One-time migration from the hand-started container (the data volume `fitznet_teamspeak_data` is reused, so nothing is lost):
+
+```bash
+scp teamspeak/docker-compose.yml proxmoxvm:/home/deploy/teamspeak/
+scp scripts/proxmox/update-teamspeak.sh proxmoxvm:/opt/fitznet/scripts/
+scp scripts/proxmox/teamspeak-update.{service,timer} proxmoxvm:/tmp/
+ssh -t proxmoxvm '
+  chmod +x /opt/fitznet/scripts/update-teamspeak.sh
+  docker rm -f teamspeak
+  cd /home/deploy/teamspeak && docker compose up -d
+  sudo mv /tmp/teamspeak-update.{service,timer} /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now teamspeak-update.timer'
+```
+
+Check it with `systemctl list-timers teamspeak-update.timer` and `journalctl -u teamspeak-update.service`.

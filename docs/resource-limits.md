@@ -1,6 +1,6 @@
 # Container Resource Limits
 
-Every service in the three compose stacks (`docker-compose.yml`, `observability/`, `mail/`) sets a `mem_limit`. Before this, no container had a cap, so one leaking process could fill the 8 GB Proxmox VM. The kernel OOM killer would then pick a victim, possibly Mongo or the mailserver.
+Every service in the compose stacks (`docker-compose.yml`, `observability/`, `mail/`, `teamspeak/`) sets a `mem_limit`. Before this, no container had a cap, so one leaking process could fill the 8 GB Proxmox VM. The kernel OOM killer would then pick a victim, possibly Mongo or the mailserver.
 
 With a cap, a runaway container is OOM-killed inside its own cgroup and brought back by `restart: unless-stopped`. Everything else keeps running.
 
@@ -23,6 +23,7 @@ Limits are about 1.5–2× the steady-state usage measured with `docker stats` o
 | observability | node-exporter | 11 MiB | 64m | |
 | mail | mailserver | 284 MiB | 1g | rspamd (5 workers) + postfix/dovecot; ClamAV is off — raise this if `ENABLE_CLAMAV=1` |
 | mail | roundcube | 69 MiB | 256m | |
+| teamspeak | teamspeak | — (crash-looping) | 256m | revisit once it's running |
 
 ## JVM services
 
@@ -46,4 +47,4 @@ Do the JVM services and mongo last, and check their logs after each restart.
 
 - **observability:** the live file still publishes Loki 3100, Prometheus 9090, cadvisor 8081 and node-exporter 9100 on all interfaces instead of `127.0.0.1`. It also has `--web.enable-lifecycle` on Prometheus and doesn't set the Grafana admin password, anonymous-access or sign-up settings. The live file *does* add log rotation and 30d Prometheus retention, which the repo lacks.
 - **main:** the live `gamerbell` uses `env_file: /opt/fitznet/apps/gamerbell/env/dev.env`, only joins `fitznet`, and adds the `gamerbell.fitznet.org` host. The live `fitz-net-api` adds `SPRING_DATA_MONGODB_USERNAME/PASSWORD`. The live `fitz-net-website` has a healthcheck.
-- **teamspeak:** runs outside any compose file (started with `docker run`). As of 2026-10-18 it had restarted 18,980 times: the `6.0.0-beta12.1` image's built-in license expired, so it exits every minute. Pull a newer image or remove the container. If you keep it, add it to a compose file with a `mem_limit` like the services above.
+- **teamspeak:** was started by hand with `docker run`, outside any compose file. As of 2026-10-18 it had restarted 18,980 times: the `6.0.0-beta12.1` image's built-in license expired, so it exits every minute. It now has its own stack in `teamspeak/` that tracks `:latest` (`beta13.1` at the time of writing), plus a nightly updater. See the migration steps in [`scripts/proxmox/README.md`](../scripts/proxmox/README.md#teamspeak-auto-update).

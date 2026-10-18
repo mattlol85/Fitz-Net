@@ -1,0 +1,47 @@
+# TeamSpeak 6 server.
+#
+# TeamSpeak 6 is still in beta and every beta build ships a time-limited
+# license: once it expires the server exits on startup ("The default license
+# has expired. Please use the latest server version."). So this service
+# tracks :latest instead of a pinned version, and
+# scripts/proxmox/update-teamspeak.sh (run nightly by teamspeak-update.timer)
+# keeps it current. Pin a version here once a stable 6.x release exists.
+#
+# Prerequisites (run once on the host before first deploy):
+#   1. Ensure the fitznet network exists (created by main stack):
+#        docker network ls | grep fitznet
+#   2. Remove the old hand-started container (data lives in the volume and
+#      is kept):
+#        docker rm -f teamspeak
+#
+# Deploy:
+#   docker compose up -d
+#
+# Memory limits: see docs/resource-limits.md.
+
+services:
+  teamspeak:
+    image: teamspeaksystems/teamspeak6-server:latest
+    container_name: teamspeak
+    mem_limit: 256m
+    # Check the registry on every `up` rather than reusing the cached image.
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      TSSERVER_LICENSE_ACCEPTED: accept
+    ports:
+      - "9987:9987/udp"   # voice
+      - "30033:30033"     # file transfer
+    volumes:
+      - teamspeak_data:/var/tsserver
+    networks:
+      - fitznet
+
+volumes:
+  teamspeak_data:
+    external: true
+    name: fitznet_teamspeak_data   # existing volume from the original docker run
+
+networks:
+  fitznet:
+    external: true
