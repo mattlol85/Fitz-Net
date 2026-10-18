@@ -11,11 +11,16 @@
 #
 # Deploy:
 #   docker compose up -d
+#
+# Memory limits: every service sets mem_limit so a leak in one container is
+# OOM-killed (and restarted) on its own instead of starving the whole VM.
+# Sized at ~1.5-2x observed steady-state usage; see docs/resource-limits.md.
 
 services:
   mailserver:
     image: ghcr.io/docker-mailserver/docker-mailserver:latest
     container_name: mailserver
+    mem_limit: 1g
     hostname: mail.fitznet.org
     ports:
       - "25:25"
@@ -52,6 +57,7 @@ services:
   roundcube:
     image: roundcube/roundcubemail:latest
     container_name: roundcube
+    mem_limit: 256m
     environment:
       - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mail.fitznet.org
       - ROUNDCUBEMAIL_DEFAULT_PORT=993

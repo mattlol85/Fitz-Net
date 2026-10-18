@@ -4,14 +4,22 @@
 #
 # Deploy:
 #   docker compose up -d
+#
+# Memory limits: every service sets mem_limit so a leak in one container is
+# OOM-killed (and restarted) on its own instead of starving the whole VM.
+# Sized at ~1.5-2x observed steady-state usage; see docs/resource-limits.md.
 
 services:
   gamerbell:
     image: mattlol85/bell-api:latest
     container_name: gamerbell
+    mem_limit: 768m
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      # Size the JVM heap from mem_limit (default is 25% of host RAM, which
+      # ignores the container cap). 70% leaves headroom for metaspace/threads.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70
     networks:
       - fitznet
       - internal
@@ -25,6 +33,7 @@ services:
   fitz-net-api:
     image: mattlol85/fitz-net-api:latest
     container_name: fitz-net-api
+    mem_limit: 640m
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: prod
@@ -36,6 +45,9 @@ services:
       MONGO_DATABASE: ${MONGO_DATABASE}
       MONGO_USERNAME: ${MONGO_APP_USERNAME}
       MONGO_PASSWORD: ${MONGO_APP_PASSWORD}
+      # Size the JVM heap from mem_limit (default is 25% of host RAM, which
+      # ignores the container cap). 70% leaves headroom for metaspace/threads.
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70
     networks:
       - fitznet
       - internal
@@ -51,6 +63,7 @@ services:
   fitz-net-website:
     image: mattlol85/fitz-net-website:latest
     container_name: fitz-net-website
+    mem_limit: 128m
     restart: unless-stopped
     networks:
       - fitznet
@@ -69,6 +82,7 @@ services:
   mongo:
     image: mongo:8.0
     container_name: fitz-net-api-mongo
+    mem_limit: 768m
     restart: unless-stopped
     environment:
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
@@ -85,6 +99,7 @@ services:
   caddy:
     image: lucaslorentz/caddy-docker-proxy:latest
     container_name: caddy
+    mem_limit: 128m
     restart: unless-stopped
     ports:
       - "80:80"
