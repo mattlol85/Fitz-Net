@@ -1,7 +1,12 @@
+# Memory limits: every service sets mem_limit so a leak in one container is
+# OOM-killed (and restarted) on its own instead of starving the whole VM.
+# Sized at ~1.5-2x observed steady-state usage; see docs/resource-limits.md.
+
 services:
   loki:
     image: grafana/loki:3.6.0
     container_name: loki
+    mem_limit: 768m
     command: -config.file=/etc/loki/config.yml
     volumes:
       - ./loki/config.yml:/etc/loki/config.yml:ro
@@ -20,6 +25,7 @@ services:
     # so keep this on a current patched release.
     image: grafana/grafana:13.2.3
     container_name: grafana
+    mem_limit: 512m
     expose:
       - "3000"
     environment:
@@ -48,6 +54,7 @@ services:
   promtail:
     image: grafana/promtail:3.6.0
     container_name: promtail
+    mem_limit: 256m
     command: -config.file=/etc/promtail/config.yml
     volumes:
       - ./promtail/config.yml:/etc/promtail/config.yml:ro
@@ -60,6 +67,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    mem_limit: 512m
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -83,6 +91,7 @@ services:
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
+    mem_limit: 256m
     # Exposes detailed per-container metrics and host info with no auth.
     # Prometheus scrapes it over the Docker network (see prometheus.yml);
     # bind the published port to loopback only.
@@ -98,6 +107,7 @@ services:
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
+    mem_limit: 64m
     # Runs with pid: host and /:/host:ro — host metrics, no auth.
     # Prometheus scrapes it over the Docker network; bind to loopback only.
     ports:
