@@ -11,7 +11,7 @@ browser ──HTTPS──> fitz-net-api  /joenet/{radarr|sonarr}/**  ──HTTP�
 
 Radarr and Sonarr are plain-HTTP, LAN-only services with no CORS headers, so the browser cannot call them directly from the HTTPS site. `fitz-net-api` forwards the request instead.
 
-- The API host comes from `JOENET_HOST` (same value Fitz-Bot uses). Ports are `7878` (Radarr) and `8989` (Sonarr). If `JOENET_HOST` is empty the proxy returns `503`.
+- The API host comes from `JOENET_HOST` and defaults to `joenet.doomdns.org` (the same host Fitz-Bot uses), so no setup is needed unless it moves. Ports are `7878` (Radarr) and `8989` (Sonarr). If `JOENET_HOST` is set empty the proxy returns `503`.
 - The Radarr/Sonarr API key is pasted into the Admin Panel. The site verifies it with `GET /joenet/{app}/system/status` and only then saves it, in `sessionStorage` (gone when the tab closes, on logout, or on a `401`).
 - The key is sent per request in the `X-Joenet-Key` header and forwarded as `X-Api-Key`. The API never stores or logs it.
 
@@ -21,8 +21,8 @@ The tab and the proxy require the `JOENET_USER` permission (or `ADMIN`). `JOENET
 
 ## Setup on the prod box
 
-1. Set `JOENET_HOST=<radarr/sonarr host>` in the Docker VM's `.env` and redeploy `fitz-net-api`.
-2. Confirm the VM can reach it: `curl -H "X-Api-Key: <key>" http://$JOENET_HOST:7878/api/v3/system/status`.
+1. Nothing to set: `JOENET_HOST` defaults to `joenet.doomdns.org`. Only add `JOENET_HOST=<host>` to the Docker VM's `.env` (and redeploy `fitz-net-api`) to override it.
+2. Confirm the VM can reach it: `curl -H "X-Api-Key: <key>" http://joenet.doomdns.org:7878/api/v3/system/status`.
 3. Make sure `JOENET_USER` exists and is granted to your user.
 
 ## Proxy contract
