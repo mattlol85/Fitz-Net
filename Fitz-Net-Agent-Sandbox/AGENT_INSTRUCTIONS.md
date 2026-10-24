@@ -179,6 +179,7 @@ pio device monitor       # View serial output (115200 baud)
 - **Void endpoints:** If the backend returns `void`, the frontend `response.json()` will fail. Always return a response DTO.
 - **CORS:** New origins must be added to both `SecurityConfig.corsConfigurationSource()` and `management.endpoints.web.cors.allowed-origins` in `application.properties`
 - **Security:** New public endpoints must be added to the `permitAll()` list in `SecurityConfig`
+- **REST without gRPC:** Every REST endpoint in `fitz-net-api`, `GamerBell` and `Fitz-Bot` needs a matching gRPC RPC (`.proto` + `@GrpcService` delegating to the controller + test). Public `fitz-net-api` routes also go in `GrpcAuthInterceptor.PUBLIC_METHODS`, otherwise the RPC answers `UNAUTHENTICATED`. See `docs/grpc.md`.
 
 ---
 

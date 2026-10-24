@@ -23,8 +23,10 @@ services:
     networks:
       - fitznet
       - internal
+    # 9090 is gRPC (see docs/grpc.md): Docker-network only, not routed through Caddy.
     expose:
       - "8080"
+      - "9090"
     labels:
       caddy: gamerbell.fitznet.doomdns.org
       caddy.reverse_proxy: "{{upstreams 8080}}"
@@ -52,8 +54,10 @@ services:
     networks:
       - fitznet
       - internal
+    # 9090 is gRPC (see docs/grpc.md): Docker-network only, not routed through Caddy.
     expose:
       - "8080"
+      - "9090"
     labels:
       caddy: api.fitznet.doomdns.org, api.fitznet.org
       caddy.reverse_proxy: "{{upstreams 8080}}"
