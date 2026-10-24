@@ -56,7 +56,8 @@ When building a feature that spans multiple repos:
 4. For GamerBell/WebSocket changes: update `ButtonEventDto` and the corresponding `WebSocketButton.jsx` in `fitz-net-website` in sync
 5. For ESP32 bell changes: the `Esp32FitznetBell` firmware (`src/main.cpp`) speaks the same WebSocket event schema as GamerBell — keep the press/release payload aligned. Firmware is delivered to devices over the air via GamerBell's `GET /api/firmware/latest`, which pulls `.bin` artifacts from `Esp32FitznetBell` GitHub Releases.
 6. For Fitz-Bot / Minecraft changes: `Fitz-Bot` manages the Minecraft server (running on a separate VM adjacent to the Docker host) over **RCON**. Slash commands live in `src/main/java/org/fitznet/commands/` and are registered in `BotService.startBot()`. Keep the `MINECRAFT_RCON_*` config in sync with the server's `server.properties`. See [`docs/fitz-bot.md`](../docs/fitz-bot.md).
-7. See `Fitz-Net-Agent-Sandbox/AGENT_INSTRUCTIONS.md` for the full cross-repo workflow and pitfall reference
+7. **REST + gRPC, always both.** Every REST endpoint in `fitz-net-api`, `GamerBell` and `Fitz-Bot` has an equivalent gRPC RPC (proto in `src/main/proto`, a `@GrpcService` that delegates to the same controller bean). When you add, change or remove a REST endpoint, do the same to its RPC in the same PR, plus a test and the map in [`docs/grpc.md`](../docs/grpc.md). In `fitz-net-api`, public REST routes must also go in `GrpcAuthInterceptor.PUBLIC_METHODS`. Applies to new APIs too, not just existing ones. WebSocket/STOMP, Thymeleaf pages, `/joenet/**` and actuator are exempt.
+8. See `Fitz-Net-Agent-Sandbox/AGENT_INSTRUCTIONS.md` for the full cross-repo workflow and pitfall reference
 
 ---
 
