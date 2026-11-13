@@ -104,6 +104,46 @@ function Get-NodeHeartbeatState {
     }
 }
 
+function ConvertFrom-NvidiaSmiMemory {
+    param(
+        [object[]]$Lines
+    )
+
+    # nvidia-smi prints one "total, used" line per GPU (MiB, no units). The
+    # first GPU is used, matching the VRAM detected at install time.
+    $first = @($Lines) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        Select-Object -First 1
+    if (-not $first) { return $null }
+
+    $parts = ([string]$first).Split(",")
+    if ($parts.Count -lt 2) { return $null }
+
+    $total = 0
+    $used = 0
+    if (-not [int]::TryParse($parts[0].Trim(), [ref]$total)) { return $null }
+    if (-not [int]::TryParse($parts[1].Trim(), [ref]$used)) { return $null }
+    if ($total -le 0 -or $used -lt 0) { return $null }
+
+    return [pscustomobject]@{
+        TotalMb = $total
+        UsedMb = $used
+    }
+}
+
+function Get-NodeGpuMemory {
+    # Optional: a node without an NVIDIA GPU (or without nvidia-smi on the
+    # SYSTEM path) simply reports no VRAM figures.
+    if (-not (Get-Command nvidia-smi -ErrorAction SilentlyContinue)) { return $null }
+
+    try {
+        $lines = & nvidia-smi --query-gpu=memory.total,memory.used --format=csv,noheader,nounits 2>$null
+        return ConvertFrom-NvidiaSmiMemory -Lines $lines
+    } catch {
+        return $null
+    }
+}
+
 function Set-SplitTunnelProfile {
     param(
         [Parameter(Mandatory = $true)]

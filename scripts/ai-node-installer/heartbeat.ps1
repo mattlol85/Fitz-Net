@@ -55,11 +55,22 @@ $heartbeatState = Get-NodeHeartbeatState -OllamaAvailable $ollamaAvailable -Mode
 $status = $heartbeatState.Status
 $address = $heartbeatState.Address
 
-$body = @{
+$heartbeat = @{
     status  = $status
     models  = @($models)
     address = $address
-} | ConvertTo-Json
+}
+
+# Optional GPU memory, so the model picker can show how much VRAM is really in
+# use (games included), not just what Ollama has loaded. Left out entirely when
+# nvidia-smi is unavailable; fitz-net-api treats both fields as optional.
+$gpuMemory = Get-NodeGpuMemory
+if ($gpuMemory) {
+    $heartbeat.vramTotalMb = $gpuMemory.TotalMb
+    $heartbeat.vramUsedMb = $gpuMemory.UsedMb
+}
+
+$body = $heartbeat | ConvertTo-Json
 
 try {
     Invoke-RestMethod -Method Post -Uri "$($config.apiBaseUrl)/node/heartbeat" `
