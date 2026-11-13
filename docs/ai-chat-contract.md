@@ -368,11 +368,12 @@ Pre-stream HTTP errors (nothing is persisted, the response is normal JSON):
 
 **Cancel.** Closing the HTTP response (browser `AbortController`) or cancelling the gRPC call stops
 the generation on the GPU by disconnecting the upstream `HttpURLConnection` — the existing
-behaviour, which must be kept. It must take effect within `ai.chat.cancel-poll-interval` (2 s) at
-**any** point, including while the model is still loading and no upstream bytes have arrived: while
-a turn is open the server writes an SSE comment frame (`:\n\n`) whenever nothing else was written
-for that interval, and a failed write (REST) or `isCancelled()` / `onCancel` (gRPC) disconnects the
-upstream. The partial reply is kept with `status: "cancelled"`, `finishReason: "cancelled"`.
+behaviour, which must be kept. It must take effect at **any** point, including while the model is
+still loading and no upstream bytes have arrived: while a turn is open the server writes an SSE
+comment frame (`:\n\n`) whenever nothing else was written for `ai.chat.cancel-poll-interval` (1 s),
+and a failed write (REST) or `isCancelled()` / `onCancel` (gRPC) disconnects the upstream. A closed
+HTTP connection is only noticed on the second write after it closes, so a cancel during loading
+lands within about two intervals (≈ 2 s); a cancel while tokens are flowing is immediate. The partial reply is kept with `status: "cancelled"`, `finishReason: "cancelled"`.
 
 **History replay.** Sent to the model in `seq` order: assistant messages with non-empty content and
 status `complete` or `cancelled`, and all user messages. `thinking` is never replayed. Messages with
@@ -695,7 +696,7 @@ ai.catalog.loaded-ttl=${AI_CATALOG_LOADED_TTL:5s}
 ai.catalog.connect-timeout=${AI_CATALOG_CONNECT_TIMEOUT:2s}
 ai.catalog.read-timeout=${AI_CATALOG_READ_TIMEOUT:4s}
 ai.catalog.force-refresh-interval=${AI_CATALOG_FORCE_REFRESH_INTERVAL:2s}
-ai.chat.cancel-poll-interval=${AI_CHAT_CANCEL_POLL_INTERVAL:2s}
+ai.chat.cancel-poll-interval=${AI_CHAT_CANCEL_POLL_INTERVAL:1s}
 ai.chat.max-message-chars=${AI_CHAT_MAX_MESSAGE_CHARS:32000}
 ai.chat.max-attachments-per-message=${AI_CHAT_MAX_ATTACHMENTS:4}
 ai.chat.max-attachment-bytes=${AI_CHAT_MAX_ATTACHMENT_BYTES:3145728}
