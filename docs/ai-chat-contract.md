@@ -305,6 +305,10 @@ Rules:
   client calls it once, after the first reply completes.
 - A message found in `streaming` state when no generation is in flight for that conversation is
   returned as `status: "error"`, `error.code: "INTERRUPTED"`.
+- `DELETE` and `…/summarize` answer **409** while a generation is in flight for the conversation.
+- An assistant message that failed before a node was chosen (routing, vision check) still has a
+  minimal `generation`: the **requested** `model` and `nodeId` (null for Auto), `nodeName` when
+  known, `auto`, `finishReason: "error"`; everything else null.
 
 ## 7. Turns (streaming)
 
