@@ -276,7 +276,8 @@ The client calls this when a model is **selected** (not hovered), debounced.
     "promptTokens": 812, "completionTokens": 240,
     "ttftMs": 420, "totalMs": 5210, "loadMs": 0, "thinkingMs": null,
     "tokensPerSecond": 48.2,
-    "finishReason": "stop"             // "stop" | "length" | "cancelled" | "error"
+    "finishReason": "stop",            // "stop" | "length" | "cancelled" | "error"
+    "contextOverflow": false           // the model's window was full (same flag as the done event)
   },
   "createdAt": "…",
   "editedAt": null
