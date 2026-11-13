@@ -96,9 +96,11 @@ node (legacy and v2 endpoints both count). The wire shape of `/node/list` does n
 | `vramTotalMb` (int) | `optional int32 vram_total_mb = 6` | GPU memory total, MiB (`nvidia-smi memory.total`) |
 | `vramUsedMb` (int) | `optional int32 vram_used_mb = 7` | GPU memory in use by **everything** (games included), MiB |
 
-They are stored on `AiNode` with `vramReportedAt`. Nodes on the old installer simply omit them and
-keep working; the picker then shows only what Ollama itself has loaded against the registered
-`vramGb`. Shipping this to nodes means redistributing `scripts/ai-node-installer`.
+They are stored on `AiNode` with `vramReportedAt` and used only while that timestamp is within
+`ai.node.stale-after`, so a node that stops reporting never shows frozen numbers. Nodes on the old
+installer simply omit them and keep working; the picker then shows only what Ollama itself has
+loaded against the registered `vramGb`. Shipping this to nodes means redistributing
+`scripts/ai-node-installer`.
 
 ## 3. Picker catalogue
 
@@ -131,7 +133,7 @@ keep working; the picker then shows only what Ollama itself has loaded against t
           "parameterSize": "8.0B",     // nullable
           "quantization": "Q4_K_M",    // nullable
           "sizeBytes": 4920753328,     // nullable
-          "contextLength": 8192,       // effective window: min(native, ollama.max-num-ctx)
+          "contextLength": 8192,       // effective window: min(native, ollama.max-num-ctx); null if the node could not report it
           "maxContextLength": 131072,  // native window, nullable
           "capabilities": ["completion", "vision"],   // [] when unknown
           "loaded": true,              // in /api/ps, or a warm-up for it is in flight
@@ -158,8 +160,9 @@ keep working; the picker then shows only what Ollama itself has loaded against t
 }
 ```
 
-`nodes` lists every registered node, OFFLINE ones included (the picker greys them out), sorted by
-name. An OFFLINE node's `models` come from its last snapshot or heartbeat names.
+`nodes` lists every registered node, OFFLINE ones included (the picker greys them out and lists them
+last), sorted by name. An OFFLINE node's `models` come from its last snapshot or heartbeat names and
+may be empty; a node that never sent a heartbeat is OFFLINE. `autoNodeId` may be a BUSY node.
 
 ## 4. Routing
 
@@ -374,7 +377,8 @@ status `error` are skipped. Images from older messages are sent only if the targ
 ### 7.2 Events
 
 Grammar: `meta? (status | thinking | token | meta)* (done | error)`. `meta` is missing only when
-routing fails; it repeats only after an Auto failover (the latest wins). Comment frames (`:\n\n`)
+routing fails; it repeats only after an Auto failover (the latest wins, with the same
+`conversationId`, `userMessageId` and `assistantMessageId`). Comment frames (`:\n\n`)
 may appear anywhere. **Clients must ignore unknown event names and unknown fields.**
 
 ```jsonc
@@ -456,7 +460,8 @@ in use. Nothing is ever deleted by trimming.
 
 **Preflight** — `GET /ai/conversations/{id}/context?model=&nodeId=` → `GetContextUsage`.
 Without `model` it uses the conversation's target. The client calls it when the user switches model
-so the ring and the warning update before anything is sent.
+so the ring and the warning update before anything is sent. When the target cannot be resolved right
+now (no target, node offline, model gone) it answers 503, and `ConversationDetail.context` is `null`.
 
 ```jsonc
 // ContextUsage
@@ -540,8 +545,10 @@ trimmed range does not fit the window either, the most recent part of it is summ
 { "lastTarget": { "model": "llama3.1:8b", "nodeId": null }, "lastPresetId": null, "updatedAt": "…" }
 ```
 
-One document per user. The server updates `lastTarget` itself whenever a turn or a conversation
-PATCH carries a target; the client `PUT`s when the picker changes before a conversation exists. A
+One document per user. `PUT` is presence-based: an absent field is kept, an explicit `null` clears
+it, a value replaces it (gRPC: an unset field is kept; an empty `ModelTarget` or empty string
+clears). The server updates `lastTarget` itself whenever a turn or a conversation PATCH carries a
+target; the client `PUT`s when the picker changes before a conversation exists. A
 new chat starts on `lastTarget` if the catalogue still has that model; each conversation remembers
 its own `target`.
 
@@ -682,6 +689,7 @@ ai.catalog.models-ttl=${AI_CATALOG_MODELS_TTL:60s}
 ai.catalog.loaded-ttl=${AI_CATALOG_LOADED_TTL:5s}
 ai.catalog.connect-timeout=${AI_CATALOG_CONNECT_TIMEOUT:2s}
 ai.catalog.read-timeout=${AI_CATALOG_READ_TIMEOUT:4s}
+ai.catalog.force-refresh-interval=${AI_CATALOG_FORCE_REFRESH_INTERVAL:2s}
 ai.chat.cancel-poll-interval=${AI_CHAT_CANCEL_POLL_INTERVAL:2s}
 ai.chat.max-message-chars=${AI_CHAT_MAX_MESSAGE_CHARS:32000}
 ai.chat.max-attachments-per-message=${AI_CHAT_MAX_ATTACHMENTS:4}
