@@ -83,6 +83,27 @@ Describe "Fitz-Net AI node heartbeat readiness" {
     }
 }
 
+Describe "Fitz-Net AI node GPU memory" {
+    It "reads total and used MiB from the first GPU" {
+        $memory = ConvertFrom-NvidiaSmiMemory -Lines @("16376, 9210", "8192, 100")
+
+        $memory.TotalMb | Should Be 16376
+        $memory.UsedMb | Should Be 9210
+    }
+
+    It "reports nothing when nvidia-smi gives no usable numbers" {
+        (ConvertFrom-NvidiaSmiMemory -Lines @("[N/A], [N/A]")) | Should Be $null
+        (ConvertFrom-NvidiaSmiMemory -Lines @("16376")) | Should Be $null
+        (ConvertFrom-NvidiaSmiMemory -Lines @()) | Should Be $null
+    }
+
+    It "reports nothing when nvidia-smi is not installed" {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq "nvidia-smi" }
+
+        Get-NodeGpuMemory | Should Be $null
+    }
+}
+
 Describe "Fitz-Net OpenVPN split-tunnel profile" {
     It "removes full-tunnel directives and keeps only the API host route" {
         $profilePath = Join-Path $TestDrive "node.ovpn"

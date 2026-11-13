@@ -63,7 +63,7 @@ Run `uninstall-ai-node.ps1` (as Administrator) on the node itself. It deregister
 
 - `install-ai-node.ps1` — the main installer, run once by the node owner.
 - `uninstall-ai-node.ps1` — cleanly removes everything the installer set up (see "Removing a node" above).
-- `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates.
+- `heartbeat.ps1` — copied to `C:\ProgramData\FitzNetNode\` and run every 2 minutes by a scheduled task (`FitzNetNodeHeartbeat`) that the installer creates. When `nvidia-smi` is available it also reports the GPU's total and in-use VRAM (`vramTotalMb`, `vramUsedMb`), which the Matt-GPT model picker shows per node. Both fields are optional: nodes installed before this was added keep working and just show less detail until the installer is re-run on them.
 - `node-network.ps1` — shared route detection used by the installer and heartbeat; it is copied beside the installed heartbeat.
 - `manage-ai-node-vpn.ps1` — explicit Connect/Disconnect/Status control for a manually managed VPN.
 - `manage-ai-node-ollama.ps1` — explicit Start/Stop/Status control for Ollama and its demand-only scheduled task.

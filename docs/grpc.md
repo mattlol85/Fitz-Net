@@ -12,7 +12,7 @@ bean the REST route uses, so validation, `@PreAuthorize`, metrics and logging ar
 
 | Repo | Proto | Services | Port |
 |---|---|---|---|
-| `fitz-net-api` | `src/main/proto/fitznet/api/v1/{user,permission,node,info}.proto` | `UserService`, `PermissionService`, `NodeService`, `InfoService` | `GRPC_PORT` (9090) |
+| `fitz-net-api` | `src/main/proto/fitznet/api/v1/{user,permission,node,info,ai_chat}.proto` | `UserService`, `PermissionService`, `NodeService`, `InfoService`, `AiChatService` | `GRPC_PORT` (9090) |
 | `GamerBell` | `src/main/proto/fitznet/gamerbell/v1/gamerbell.proto` | `GamerBellService` | `GRPC_PORT` (9090) |
 | `Fitz-Bot` | `src/main/proto/fitznet/bot/v1/bot.proto` | `BotService`, `LogService` | `GRPC_PORT` (9090) |
 
@@ -38,14 +38,30 @@ so `grpcurl -plaintext host:9090 list` works.
 | `POST /node/register` | `NodeService/RegisterNode` |
 | `POST /node/heartbeat` | `NodeService/Heartbeat` |
 | `GET /node/list` | `NodeService/ListNodes` |
-| `POST /node/{id}/chat` | `NodeService/Chat` |
-| `POST /node/{id}/chat/stream` (SSE) | `NodeService/ChatStream` (server stream of `ChatEvent`) |
+| `POST /node/{id}/chat` (deprecated, stateless) | `NodeService/Chat` |
+| `POST /node/{id}/chat/stream` (SSE; deprecated, stateless) | `NodeService/ChatStream` (server stream of `ChatEvent`) |
 | `DELETE /node/{id}` | `NodeService/DeleteNode` |
 | `POST /node/enrollment-token` | `NodeService/CreateEnrollmentToken` |
+| `GET /ai/models` | `AiChatService/ListModels` |
+| `POST /ai/warmup` | `AiChatService/WarmUp` |
+| `GET/PUT /ai/preferences` | `AiChatService/{GetPreferences,UpdatePreferences}` |
+| `GET/POST /ai/conversations` | `AiChatService/{ListConversations,CreateConversation}` |
+| `GET/PATCH/DELETE /ai/conversations/{id}` | `AiChatService/{GetConversation,UpdateConversation,DeleteConversation}` |
+| `POST /ai/conversations/{id}/title` | `AiChatService/GenerateTitle` |
+| `GET /ai/conversations/{id}/context` | `AiChatService/GetContextUsage` |
+| `POST /ai/conversations/{id}/summarize` | `AiChatService/SummarizeConversation` |
+| `POST /ai/conversations/{id}/messages` (SSE) | `AiChatService/SendMessage` (server stream of `TurnEvent`) |
+| `POST /ai/conversations/{id}/messages/{messageId}/regenerate` (SSE) | `AiChatService/RegenerateMessage` (server stream of `TurnEvent`) |
+| `POST /ai/conversations/{id}/messages/{messageId}/edit` (SSE) | `AiChatService/EditMessage` (server stream of `TurnEvent`) |
+| `POST /ai/attachments`, `GET /ai/attachments/{id}` | `AiChatService/{UploadAttachment,GetAttachment}` |
+| `GET/POST /ai/presets`, `PUT/DELETE /ai/presets/{id}` | `AiChatService/{ListPresets,CreatePreset,UpdatePreset,DeletePreset}` |
 | `GET/POST /admin/permissions`, `DELETE /admin/permissions/{p}` | `PermissionService/{ListPermissions,CreatePermission,DeletePermission}` |
 | `GET /admin/users` | `PermissionService/ListUsers` |
 | `GET/PUT /admin/users/{u}/permissions` | `PermissionService/{GetUserPermissions,SetUserPermissions}` |
 | `POST/DELETE /admin/users/{u}/permissions/{p}` | `PermissionService/{GrantUserPermission,RevokeUserPermission}` |
+
+Request, response and stream-event shapes for every `/ai/**` route and `AiChatService` RPC are in
+[`ai-chat-contract.md`](ai-chat-contract.md).
 
 **GamerBell**: `GET /count` → `GetCount`; `GET /api/firmware/latest` → `GetLatestFirmware` (server
 stream: one `FirmwareInfo`, then the `.bin` in 64 KiB chunks; `up_to_date` replaces the 304);
