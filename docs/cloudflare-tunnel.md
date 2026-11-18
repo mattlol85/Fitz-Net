@@ -25,6 +25,44 @@ Client ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
 | Public hostname | Tunnel service | Caddy site |
 |---|---|---|
 | `gamerbell.fitznet.org` | `http://caddy:80` | `http://gamerbell.fitznet.org` (GamerBell `caddy_1`) |
+| `fitznet.org` | `http://caddy:80` | `http://fitznet.org` (website `caddy_1`) |
+| `api.fitznet.org` | `http://caddy:80` | `http://api.fitznet.org` (API `caddy_1`) |
+
+Each service keeps its HTTPS sites in `caddy_0` (the doomdns hosts, plus
+`fitznet.org` for Cloudflare's proxied-to-origin path) until phase 4. An
+explicit `http://` site stops Caddy's automatic http→https redirect for that
+host, so the HTTPS and tunnel sites for `fitznet.org` coexist.
+
+### Real client IPs
+
+Caddy's global `servers` options are set as labels on the `caddy` service:
+- **`trusted_proxies`:** the `fitznet` Docker network, i.e. `cloudflared`,
+  written as CIDRs that leave out the gateway `172.18.0.1`, plus Cloudflare's
+  edge ranges from <https://www.cloudflare.com/ips/>.
+- **`client_ip_headers`:** `Cf-Connecting-IP`, then `X-Forwarded-For`.
+
+**Why the gateway is excluded:** Docker's port proxy forwards some outside
+traffic from `172.18.0.1`, so trusting it would let anyone forge
+`Cf-Connecting-IP` by sending straight to the origin.
+
+**What it gives you:** upstreams get the real client first in
+`X-Forwarded-For`. GamerBell's `clientIp` and the website's nginx log show
+the visitor's IP. The API doesn't log client IPs.
+
+**Upkeep:** refresh the Cloudflare ranges if Cloudflare changes them. Once
+phase 4 closes the origin's ports, only the Docker ranges matter.
+
+**Verify** (2026-11-18): a tunnel request logs the caller's public IP, not
+`cloudflared`'s, and a spoofed `Cf-Connecting-IP` sent to the doomdns host is
+ignored.
+
+### Status (2026-11-18)
+
+- **`gamerbell.fitznet.org`:** live on the tunnel.
+- **`api.fitznet.org`:** live on the tunnel. It has no other route.
+- **`fitznet.org`:** has a tunnel route, but its apex DNS record still sent
+  traffic to the origin's port 443. Replace the apex record with the tunnel
+  route. The site works either way.
 
 ## Cloudflare dashboard setup (phase 1 prep)
 
@@ -49,8 +87,9 @@ Do this before the [VM handoff](cloudflare-tunnel-vm-handoff.md).
      and matches its site.
    - Saving creates a proxied `CNAME gamerbell → <tunnel-id>.cfargotunnel.com`.
      The tunnel shows *Inactive* until the VM starts `cloudflared`.
-4. **Don't touch the apex record yet.** `fitznet.org` stays a CNAME to
-   doomdns until phase 4.
+4. **Route `fitznet.org` and `api.fitznet.org` too** (done 2026-11-18). Same
+   settings as `gamerbell`. The apex `fitznet.org` must point at the tunnel,
+   replacing its old proxied CNAME to doomdns.
 5. **Check SSL/TLS.**
    - Overview should be **Full**. It already is.
    - Under Edge Certificates, turn on Always Use HTTPS, and keep Minimum TLS
@@ -79,8 +118,8 @@ Do this before the [VM handoff](cloudflare-tunnel-vm-handoff.md).
    - Keep the `send.` / `resend._domainkey` records if the API still sends
      email through Resend.
 
-`api.fitznet.org` has no DNS record today even though Caddy lists it. It joins
-the tunnel in phase 4.
+`fitznet.org` and `api.fitznet.org` were moved to the tunnel on 2026-11-18,
+ahead of phase 4, because they don't depend on the bells.
 
 ## Migration (bells first)
 
@@ -100,8 +139,9 @@ before they update, they go offline and can't receive the fix over the air.
 3. **Soak.** In Grafana, confirm every known `deviceMac` reports v0.17.0 or later.
    Bells that are powered off still run old firmware. Keep the old path for a
    couple of weeks, or until every MAC has checked in.
-4. **Close the old path.** Move `fitznet.org` / `api.fitznet.org` to the tunnel
-   (`http://` Caddy sites), drop the doomdns sites, remove the `80`/`443`
+4. **Close the old path.** `fitznet.org` and `api.fitznet.org` are already on
+   the tunnel. Drop the doomdns sites and the HTTPS `fitznet.org` site (each
+   service's `caddy_0`), remove the `80`/`443`
    port publishing on Caddy, close the router forwards and stop the DDNS
    updater. Remove or proxy any DNS-only `A` records that still expose the
    home IP.
