@@ -28,8 +28,16 @@ services:
       - "8080"
       - "9090"
     labels:
-      caddy: gamerbell.fitznet.doomdns.org
-      caddy.reverse_proxy: "{{upstreams 8080}}"
+      # Legacy direct path (router 80/443 -> Caddy, Let's Encrypt cert). Bells on
+      # firmware <= v0.16.0 only know this host; keep it until every bell has
+      # moved to gamerbell.fitznet.org (docs/cloudflare-tunnel.md).
+      caddy_0: gamerbell.fitznet.doomdns.org
+      caddy_0.reverse_proxy: "{{upstreams 8080}}"
+      # Cloudflare Tunnel path. Cloudflare terminates TLS and cloudflared sends
+      # plain HTTP to caddy:80, so this site must be http:// (an https site
+      # would redirect back to https and loop).
+      caddy_1: http://gamerbell.fitznet.org
+      caddy_1.reverse_proxy: "{{upstreams 8080}}"
       caddy_network: fitznet
 
   fitz-net-api:
@@ -112,6 +120,26 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - caddy_data:/data
+    networks:
+      - fitznet
+
+  # Outbound-only connector for the Cloudflare Tunnel: Cloudflare's edge sends
+  # requests for the tunnel's public hostnames down this connection to
+  # http://caddy:80, so those hostnames need no open router ports. Hostname
+  # routing lives in the Cloudflare dashboard (remotely managed tunnel); see
+  # docs/cloudflare-tunnel.md.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.7
+    container_name: cloudflared
+    mem_limit: 64m
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run
+    environment:
+      # Empty until the tunnel exists: cloudflared then exits and restarts on its
+      # own without blocking the rest of the stack.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      - caddy
     networks:
       - fitznet
 
