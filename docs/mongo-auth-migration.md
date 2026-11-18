@@ -1,6 +1,6 @@
 # Handoff: migrating the production `mongo` container to an authenticated, supported version
 
-This is the runbook for the host running `docker-compose.yml` (the Fitz-Net VM) for cutting the existing `mongo:4.4`, unauthenticated, host-published container over to the `mongo:8.0`, authenticated, internal-network-only setup introduced in [#40](https://github.com/mattlol85/Fitz-Net/issues/40). Run this by hand on that host — it can't be done from a dev checkout.
+This is the runbook for the Fitz-Net VM, whose live stack is `/opt/fitznet/compose.yml`, for cutting the existing `mongo:4.4`, unauthenticated, host-published container over to the `mongo:8.0`, authenticated, internal-network-only setup introduced in [#40](https://github.com/mattlol85/Fitz-Net/issues/40). Run this by hand on that host — it can't be done from a dev checkout.
 
 ## Why a separate runbook
 
@@ -30,9 +30,12 @@ The live `mongo_data` volume holds real user accounts (emails, BCrypt hashes). S
    docker volume rm fitz-net_mongo_data   # confirm the actual volume name with `docker volume ls` first
    ```
 
-4. **Pull the updated `docker-compose.yml`** (this PR) and bring the new `mongo:8.0` container up on the now-empty volume:
+4. **Update the live compose file** and bring the new `mongo:8.0` container up on the now-empty volume. On the VM the live file is `/opt/fitznet/compose.yml`, owned by `deploy`. It isn't a git checkout and has drifted from this repo, so `git pull` doesn't work there and copying the repo file over it would drop prod-only settings. Edit only the `mongo` service by hand, as `deploy`, to match this PR:
    ```bash
-   git pull
+   cd /opt/fitznet
+   cp compose.yml compose.yml.bak-$(date +%Y%m%d-%H%M%S)
+   nano compose.yml          # apply the mongo service changes from this PR
+   docker compose config -q
    docker compose up -d mongo
    docker compose logs mongo   # confirm create-app-user.sh ran without error
    ```

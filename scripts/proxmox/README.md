@@ -12,7 +12,7 @@ scp scripts/proxmox/deploy-fitz-net-website.sh proxmoxvm:/opt/fitznet/scripts/
 ssh proxmoxvm "chmod +x /opt/fitznet/scripts/deploy-fitz-net-api.sh /opt/fitznet/scripts/deploy-fitz-net-website.sh"
 ```
 
-Each script takes a Docker Hub tag as its only argument (defaults to `latest`), pulls `mattlol85/<image>:<tag>`, retags it locally as `:latest` (since `docker-compose.yml` hardcodes `:latest`), and recreates just that service with `docker compose up -d --no-deps <service>`.
+Each script takes a Docker Hub tag as its only argument (defaults to `latest`), pulls `mattlol85/<image>:<tag>`, retags it locally as `:latest` (since the live compose file hardcodes `:latest`), and recreates just that service with `docker compose up -d --no-deps <service>` from `/opt/fitznet`. The live compose file there is `/opt/fitznet/compose.yml`, not a copy of this repo's `docker-compose.yml`. It isn't a git checkout, and it has drifted from the repo (see [`docs/resource-limits.md`](../../docs/resource-limits.md)).
 
 `deploy-gamerbell.sh` already exists on the server following this same convention but is not tracked in any repo.
 

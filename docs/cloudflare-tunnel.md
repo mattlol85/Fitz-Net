@@ -3,7 +3,9 @@
 Goal: serve Fitz-Net through a Cloudflare Tunnel so the home router needs **no
 open ports** and the home IP is never published. `cloudflared` (in
 `docker-compose.yml`) dials out to Cloudflare; Cloudflare sends requests for the
-tunnel's public hostnames down that connection to `http://caddy:80`.
+tunnel's public hostnames down that connection to `http://caddy:80`. On the
+VM the stack actually runs from `/opt/fitznet/compose.yml`, which has drifted
+from the repo file; port changes into it by hand.
 
 ```
 Client ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared ──http──▶ caddy:80 ──▶ service
@@ -66,8 +68,12 @@ Do this before the [VM handoff](cloudflare-tunnel-vm-handoff.md).
    deleting):
    - `logs.fitznet.org` and `mail.fitznet.org` are **DNS-only `A` records**
      that publish the home IP. That defeats the tunnel.
-   - The mail stack was dropped, so `mail` A, the apex `MX` and the apex
-     `v=spf1 mx` TXT can likely go.
+   - The mail stack is gone. On 2026-11-18 its containers (`mailserver`,
+     `roundcube`) and the `mail_roundcube-data` volume were removed from the
+     VM. So the `mail` A, the apex `MX` and the apex `v=spf1 mx` TXT can go,
+     along with router forwards for ports 25, 465, 587 and 993.
+     `/home/deploy/mail/` still holds the old compose file and data, owned by
+     `deploy` and root; delete it with `sudo rm -rf /home/deploy/mail`.
    - For `logs`, either delete it or later route it through the tunnel behind
      Cloudflare Access.
    - Keep the `send.` / `resend._domainkey` records if the API still sends

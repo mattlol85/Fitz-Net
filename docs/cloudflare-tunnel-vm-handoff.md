@@ -31,25 +31,56 @@ You need these from Matt:
 2. **Confirmation that the tunnel's public hostname exists:**
    `gamerbell.fitznet.org` → `http://caddy:80`.
 
-## 1. Update the compose file
+## How the VM is laid out
 
-Bring `/opt/fitznet` up to date with Fitz-Net `main`, after the
-`cloudflare-tunnel` PR is merged. If `/opt/fitznet` isn't a git checkout, copy
-the new `docker-compose.yml` over the old one.
+Checked on 2026-11-18:
+- The live compose file is **`/opt/fitznet/compose.yml`**. It is **not** a git
+  checkout and **not** a copy of the repo's `docker-compose.yml`.
+- It has drifted from the repo. It keeps prod-only settings the repo lacks,
+  such as GamerBell's `env_file: /opt/fitznet/apps/gamerbell/env/dev.env`,
+  the `SPRING_DATA_MONGODB_USERNAME/PASSWORD` mapping on `fitz-net-api`, and
+  the website healthcheck. See the drift notes in
+  [`resource-limits.md`](resource-limits.md).
+- `compose.yml` and `.env` belong to `deploy`, and `.env` is mode `600`. Run
+  the commands below as `deploy`, for example after `sudo -iu deploy`.
+
+**Don't copy the repo's `docker-compose.yml` over `compose.yml`.** Doing so
+would drop those prod-only settings. Edit the live file in place instead.
+
+## 1. Edit the live compose file
 
 ```bash
 cd /opt/fitznet
-cp docker-compose.yml docker-compose.yml.bak-$(date +%F)   # rollback copy
-git pull            # or copy the file from the merged PR
+cp compose.yml compose.yml.bak-$(date +%Y%m%d-%H%M%S)   # rollback copy
+nano compose.yml
 ```
 
-The merged file has two changes:
-- **GamerBell labels.** GamerBell now has two Caddy sites:
-  - `caddy_0`: `gamerbell.fitznet.doomdns.org`, the existing HTTPS site.
-  - `caddy_1`: `http://gamerbell.fitznet.org`, the tunnel site. It's plain
-    HTTP on purpose, because Cloudflare does TLS.
-- **New `cloudflared` service.** It runs on the `fitznet` network, uses image
+Make exactly two changes, copied from Fitz-Net `main` `docker-compose.yml`:
+
+- **GamerBell labels.** Replace the `caddy:` / `caddy.reverse_proxy:` labels with
+  two Caddy sites. Keep `caddy_network: fitznet`.
+  ```yaml
+      caddy_0: gamerbell.fitznet.doomdns.org
+      caddy_0.reverse_proxy: "{{upstreams 8080}}"
+      caddy_1: http://gamerbell.fitznet.org
+      caddy_1.reverse_proxy: "{{upstreams 8080}}"
+  ```
+  `caddy_0` is the existing HTTPS site. `caddy_1` is the tunnel site, and it's
+  plain HTTP on purpose because Cloudflare does TLS. As of 2026-11-18 the live
+  file and the running container both had a hand edit,
+  `caddy: gamerbell.fitznet.doomdns.org, gamerbell.fitznet.org`. That makes the
+  tunnel host an HTTPS site, which redirect-loops through the tunnel and leaves
+  Caddy retrying a Let's Encrypt certificate it can't get, so it must be
+  replaced, not kept.
+- **New `cloudflared` service.** Copy the whole `cloudflared:` block into
+  `services:`. It runs on the `fitznet` network, uses image
   `cloudflare/cloudflared:2026.10.7`, and reads `CLOUDFLARE_TUNNEL_TOKEN`.
+
+Check that nothing else changed:
+
+```bash
+diff compose.yml.bak-<timestamp> compose.yml   # only the label lines and the cloudflared block
+```
 
 ## 2. Add the token to `.env`
 
@@ -61,6 +92,8 @@ chmod 600 .env
 ```
 
 ## 3. Bring it up
+
+`docker compose` picks up `compose.yml` automatically from `/opt/fitznet`.
 
 ```bash
 cd /opt/fitznet
@@ -83,11 +116,10 @@ docker logs cloudflared 2>&1 | grep -c "Registered tunnel connection"
 
 # b) Caddy serves the tunnel site over plain HTTP with no redirect.
 #    Expect 304 (or 200 with a .bin if a newer release exists), NOT 301/308.
-docker exec cloudflared wget -qS -O /dev/null \
-  --header='Host: gamerbell.fitznet.org' --header='x-ESP32-version: v0.16.0' \
-  http://caddy:80/api/firmware/latest 2>&1 | grep 'HTTP/'
-# (If the image has no wget, run the same request with curl from the host:
-#  curl -si -H 'Host: gamerbell.fitznet.org' -H 'x-ESP32-version: v0.16.0' http://127.0.0.1/api/firmware/latest | head -1)
+#    The cloudflared image has no shell or wget, so test from the host
+#    (Caddy publishes port 80 on the VM).
+curl -si -H 'Host: gamerbell.fitznet.org' -H 'x-ESP32-version: v0.16.0' \
+  http://127.0.0.1/api/firmware/latest | head -1
 
 # c) End to end through Cloudflare. Expect HTTP/2 304.
 curl -si -H 'x-ESP32-version: v0.16.0' https://gamerbell.fitznet.org/api/firmware/latest | head -1
@@ -115,7 +147,7 @@ rather than loosening `cors.allowed-origins`. Bells don't send a browser
 ```bash
 cd /opt/fitznet
 docker compose stop cloudflared
-cp docker-compose.yml.bak-<date> docker-compose.yml && docker compose up -d gamerbell
+cp compose.yml.bak-<timestamp> compose.yml && docker compose up -d gamerbell
 ```
 
 ## Report back
