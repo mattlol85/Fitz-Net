@@ -99,6 +99,10 @@ services:
       # HTTP->HTTPS redirect for this host, which would otherwise loop.
       caddy_1: http://fitznet.org
       caddy_1.reverse_proxy: "{{upstreams 80}}"
+      # Lori-Net: the same SPA, pink, picked at runtime from the hostname.
+      # Tunnel-only (no legacy HTTPS site), so http:// like caddy_1.
+      caddy_2: http://lori.fitznet.org
+      caddy_2.reverse_proxy: "{{upstreams 80}}"
       caddy_network: fitznet
     depends_on:
       - fitz-net-api

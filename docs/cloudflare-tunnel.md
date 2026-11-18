@@ -25,6 +25,7 @@ Client ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
 | `gamerbell.fitznet.org` | `http://caddy:80` | `http://gamerbell.fitznet.org` (GamerBell `caddy_1`) |
 | `fitznet.org` | `http://caddy:80` | `http://fitznet.org` (website `caddy_1`) |
 | `api.fitznet.org` | `http://caddy:80` | `http://api.fitznet.org` (API `caddy_1`) |
+| `lori.fitznet.org` | `http://caddy:80` | `http://lori.fitznet.org` (website `caddy_2`, Lori-Net) |
 
 During the migration each service has **both** a legacy HTTPS site
 (`caddy_0`) and a tunnel `http://` site (`caddy_1`). An explicit `http://`
@@ -34,6 +35,18 @@ site for a host stops Caddy's automatic HTTP→HTTPS redirect for that host. So:
   tunnel.
 
 That lets each DNS record flip with no downtime.
+
+### Lori-Net (`lori.fitznet.org`)
+
+Lori-Net is the website image again: the SPA picks the pink "LN" variant from
+the hostname and gates the whole site on the `LORINET_ACCESS` permission. It
+was born on the tunnel, so it only has an `http://` site (`caddy_2` on the
+website service) and no legacy HTTPS site or doomdns name.
+
+```sh
+curl -si -H 'Host: lori.fitznet.org' http://127.0.0.1/ | head -1             # 200, not 308
+curl -s  -H 'Host: lori.fitznet.org' http://127.0.0.1/manifest.json | grep Lori-Net
+```
 
 ### Website and API
 
