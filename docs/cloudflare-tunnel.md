@@ -23,6 +23,37 @@ Client ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
 | Public hostname | Tunnel service | Caddy site |
 |---|---|---|
 | `gamerbell.fitznet.org` | `http://caddy:80` | `http://gamerbell.fitznet.org` (GamerBell `caddy_1`) |
+| `fitznet.org` | `http://caddy:80` | `http://fitznet.org` (website `caddy_1`) |
+| `api.fitznet.org` | `http://caddy:80` | `http://api.fitznet.org` (API `caddy_1`) |
+
+During the migration each service has **both** a legacy HTTPS site
+(`caddy_0`) and a tunnel `http://` site (`caddy_1`). An explicit `http://`
+site for a host stops Caddy's automatic HTTP→HTTPS redirect for that host. So:
+- cloudflared's plain HTTP gets served instead of redirect-looping;
+- Cloudflare → router:443 keeps working for any record not yet pointed at the
+  tunnel.
+
+That lets each DNS record flip with no downtime.
+
+### Website and API
+
+The website's nginx proxies `/api/*` to `http://fitz-net-api:8080` over the
+Docker network. Browsers reach the API on the same origin, so moving
+`fitznet.org` onto the tunnel moves most API traffic with it.
+
+Steps, in order:
+1. **VM:** deploy the compose file with the `caddy_1` sites. Check:
+   ```sh
+   curl -si -H 'Host: fitznet.org' http://127.0.0.1/ | head -1      # 200, not 308
+   curl -si -H 'Host: api.fitznet.org' http://127.0.0.1/actuator/health | head -1
+   ```
+2. **Cloudflare:** point the `fitznet.org` CNAME at
+   `<tunnel-id>.cfargotunnel.com`, proxied. It currently points at
+   `fitznet.doomdns.org`. `api.fitznet.org` already points at the tunnel.
+3. **Website repo:** move the browser-side URLs that still use doomdns to the
+   `fitznet.org` hosts. These are the status dashboard's `API_CONFIGS` and
+   `API_URLS.GAMERBELL`. Also point the nginx `/actuator-*` proxies at the
+   internal services, so they stop going out through the router and back in.
 
 ## Cloudflare dashboard setup (phase 1 prep)
 

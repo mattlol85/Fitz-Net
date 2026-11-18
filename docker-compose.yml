@@ -67,8 +67,12 @@ services:
       - "8080"
       - "9090"
     labels:
-      caddy: api.fitznet.doomdns.org, api.fitznet.org
-      caddy.reverse_proxy: "{{upstreams 8080}}"
+      # Legacy direct path (router 80/443 -> Caddy, Let's Encrypt cert).
+      caddy_0: api.fitznet.doomdns.org
+      caddy_0.reverse_proxy: "{{upstreams 8080}}"
+      # Cloudflare Tunnel path: plain HTTP from cloudflared (see GamerBell).
+      caddy_1: http://api.fitznet.org
+      caddy_1.reverse_proxy: "{{upstreams 8080}}"
       caddy_network: fitznet
     depends_on:
       - mongo
@@ -86,8 +90,15 @@ services:
     expose:
       - "80"
     labels:
-      caddy: fitznet.org, fitznet.doomdns.org
-      caddy.reverse_proxy: "{{upstreams 80}}"
+      # HTTPS sites: the legacy direct path. fitznet.org stays here until its
+      # DNS points at the tunnel, so Cloudflare -> router:443 keeps working
+      # during the switch (docs/cloudflare-tunnel.md, phase 4 removes it).
+      caddy_0: fitznet.org, fitznet.doomdns.org
+      caddy_0.reverse_proxy: "{{upstreams 80}}"
+      # Tunnel path. An explicit http:// site also stops Caddy's automatic
+      # HTTP->HTTPS redirect for this host, which would otherwise loop.
+      caddy_1: http://fitznet.org
+      caddy_1.reverse_proxy: "{{upstreams 80}}"
       caddy_network: fitznet
     depends_on:
       - fitz-net-api
