@@ -1,6 +1,6 @@
 # Container Resource Limits
 
-Every service in the three compose stacks (`docker-compose.yml`, `observability/`, `mail/`) sets a `mem_limit`. Before this, no container had a cap, so one leaking process could fill the 8 GB Proxmox VM. The kernel OOM killer would then pick a victim, possibly Mongo or the mailserver.
+Every service in both compose stacks (`docker-compose.yml`, `observability/`) sets a `mem_limit`. Before this, no container had a cap, so one leaking process could fill the 8 GB Proxmox VM. The kernel OOM killer would then pick a victim, possibly Mongo.
 
 With a cap, a runaway container is OOM-killed inside its own cgroup and brought back by `restart: unless-stopped`. Everything else keeps running.
 
@@ -21,8 +21,6 @@ Limits are about 1.5–2× the steady-state usage measured with `docker stats` o
 | observability | promtail | 118 MiB | 256m | |
 | observability | cadvisor | 87 MiB | 256m | |
 | observability | node-exporter | 11 MiB | 64m | |
-| mail | mailserver | 284 MiB | 1g | rspamd (5 workers) + postfix/dovecot; ClamAV is off — raise this if `ENABLE_CLAMAV=1` |
-| mail | roundcube | 69 MiB | 256m | |
 
 ## JVM services
 
@@ -32,7 +30,7 @@ If either app gets OOM-killed (`docker inspect <name> --format '{{.State.OOMKill
 
 ## Rollout
 
-These files aren't deployed automatically. The running stacks live at `/opt/fitznet/compose.yml`, `/home/deploy/observability/docker-compose.yml` and `/home/deploy/mail/docker-compose.yml`, and **those copies have drifted from this repo** (see below). Copy only the `mem_limit` / `JAVA_TOOL_OPTIONS` lines into each live file rather than overwriting it. Then recreate one service at a time:
+These files aren't deployed automatically. The running stacks live at `/opt/fitznet/compose.yml` and `/home/deploy/observability/docker-compose.yml`, and **those copies have drifted from this repo** (see below). Copy only the `mem_limit` / `JAVA_TOOL_OPTIONS` lines into each live file rather than overwriting it. Then recreate one service at a time:
 
 ```bash
 docker compose up -d --no-deps <service>

@@ -1,20 +1,7 @@
-<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a name="readme-top"></a>
 
-<!-- PROJECT SHIELDS -->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
-
-
-
-<!-- PROJECT LOGO -->
-<br />
 <div align="center">
-  <a href="https://github.com/mattlol85/Fitz-Net">
+  <a href="https://fitznet.org">
     <img src="images/logo.png" alt="Logo" width="80" height="80">
   </a>
 
@@ -22,9 +9,6 @@
 
   <p align="center">
     A self-hosted platform for @mattlol85's ideas — running on bare metal, served to the internet.
-    <br />
-    <a href="https://github.com/mattlol85/Fitz-Net"><strong>Explore the docs »</strong></a>
-    <br />
     <br />
     <a href="https://fitznet.org">Live Site</a>
     ·
@@ -34,560 +18,136 @@
   </p>
 </div>
 
+[![Fitz-Net architecture](images/architecture.png)](https://fitznet.org/status)
 
+<sub>The live architecture graph from the website's Status page.</sub>
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li><a href="#about-the-project">About The Project</a></li>
-    <li><a href="#architecture">Architecture</a>
-      <ul>
-        <li><a href="#infrastructure">Infrastructure</a></li>
-        <li><a href="#services">Services</a></li>
-      </ul>
-    </li>
-    <li><a href="#repositories">Repositories</a></li>
-    <li>
-      <a href="#service-details">Service Details</a>
-      <ul>
-        <li><a href="#fitz-net-website">fitz-net-website</a></li>
-        <li><a href="#fitz-net-api">fitz-net-api</a></li>
-        <li><a href="#gamerbell">GamerBell</a></li>
-        <li><a href="#esp32fitznetbell">Esp32FitznetBell</a></li>
-        <li><a href="#fitz-bot">Fitz-Bot</a></li>
-        <li><a href="#mail-server">Mail Server</a></li>
-      </ul>
-    </li>
-    <li><a href="#built-with">Built With</a></li>
-    <li><a href="#getting-started">Getting Started</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-  </ol>
-</details>
+## About
 
+Fitz-Net is a personal full-stack platform running on a Proxmox box at home. It hosts:
 
+- **Website** — React SPA with a LiveBoard (shared real-time canvas), a status dashboard with a 3D architecture graph, **Matt-GPT** (chat against self-hosted Ollama models), a Radarr/Sonarr admin panel, and permission-gated admin tools.
+- **API** — Spring Boot REST + gRPC backend for users, permissions, AI chat and AI worker nodes.
+- **AI worker nodes** — volunteer Windows GPUs that run Ollama, join over OpenVPN and register themselves with the API.
+- **GamerBell + ESP32 bell** — a physical button that broadcasts presses to the site over WebSocket and updates its firmware over the air.
+- **Fitz-Bot** — Discord bot for voice milestones, media requests and Minecraft whitelisting over RCON.
+- **Observability** — Grafana, Loki, Promtail, Prometheus, cAdvisor and node-exporter, with a correlation ID traced through every request.
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
+This repo is the **orchestration hub**: Docker Compose files, deploy scripts, the AI-node installer, cross-repo docs and the Claude Code agents/skills. Application code lives in the sibling repos.
 
-[![Product Name Screen Shot][product-screenshot]](https://fitznet.org)
-
-Fitz-Net is a self-hosted, full-stack personal platform running on a home server — exposed to the internet via dynamic DNS. It's a place to build and ship real ideas, backed by real infrastructure: a Proxmox hypervisor, Docker containers, a Caddy reverse proxy, physical ESP32 hardware that talks to the backend over WebSockets, a self-hosted email server for `fitznet.org`, a Discord bot (**Fitz-Bot**) that manages a Minecraft server, and a full observability stack (Grafana, Loki, Prometheus, Promtail, cAdvisor).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- ARCHITECTURE -->
 ## Architecture
-
-### Infrastructure
-
-Traffic arrives at `fitznet.org`, which is fronted by an external reverse proxy that forwards to `fitznet.doomdns.org` (dynamic DNS on the home router). From there it reaches a Proxmox server where the active Ubuntu VM runs Docker, hosting all services behind a Caddy reverse proxy. A second Ubuntu VM is kept idle as a spare/staging target.
 
 ```mermaid
 graph TD
-    Internet(["🌐 Internet"])
-    FitznetOrg["fitznet.org\nReverse Proxy"]
-    DNS["fitznet.doomdns.org\nDynamic DNS"]
-    Router["🏠 Home Router\nPort Forwarding"]
+    Internet(["🌐 Internet"]) --> CF["Cloudflare<br/>fitznet.org"] --> DDNS["fitznet.doomdns.org<br/>Dynamic DNS"] --> Router["🏠 Home router"]
 
-    subgraph Proxmox["Proxmox Server · 192.168.1.225"]
-        VM1["Ubuntu VM 1\n⏸ Idle"]
-
-        subgraph VM2["Ubuntu VM 2 · 192.168.1.59 — Docker"]
-            Caddy["Caddy\nReverse Proxy"]
-
-            subgraph Core["fitznet-core"]
-                Website["fitz-net-website\nReact SPA"]
-                API["fitz-net-api\nSpring Boot REST"]
-                Bell["GamerBell\nWebSocket + OTA"]
-                Mongo["MongoDB"]
-            end
-
-            subgraph Mail["mail/"]
-                MailServer["mailserver\nSMTP + IMAP"]
-                Roundcube["Roundcube\nWebmail"]
-            end
-
-            subgraph Obs["observability/"]
-                Grafana["Grafana\nlogs.fitznet.org"]
-                Prometheus["Prometheus\n:9090"]
-                Loki["Loki\n:3100"]
-                Promtail["Promtail"]
-                CAdvisor["cAdvisor\n:8081"]
-                NodeExp["node-exporter\n:9100"]
-            end
+    subgraph Proxmox["Proxmox VE"]
+        subgraph Docker["Ubuntu VM · Docker"]
+            Caddy["Caddy"]
+            Website["fitz-net-website"]
+            API["fitz-net-api"]
+            Bell["GamerBell"]
+            Mongo[("MongoDB")]
+            Obs["Grafana · Loki · Prometheus"]
         end
-
-        FitzBot["🤖 Fitz-Bot\nDiscord bot · Spring Boot"]
-
-        subgraph VM3["Ubuntu VM · Minecraft Server"]
-            MC["Minecraft Server\nRCON :25575 · whitelist"]
-        end
+        MC["Minecraft VM"]
     end
 
-    ESP32["📟 ESP32 Bell\nEsp32FitznetBell"]
-    Discord(["💬 Discord"])
+    subgraph Pi["🍓 Raspberry Pi"]
+        Bot["🤖 Fitz-Bot"]
+        VPN["OpenVPN (PiVPN)"]
+    end
 
-    Internet --> FitznetOrg --> DNS --> Router
     Router -->|"80/443"| Caddy
-    Router -->|"25/587/993"| MailServer
-    Caddy --> Website
-    Caddy --> API
-    Caddy --> Bell
-    Caddy --> Roundcube
-    Caddy --> Grafana
+    Caddy --> Website & API & Bell & Obs
     API --> Mongo
-    MailServer --> Roundcube
-    ESP32 -->|"wss"| Bell
-    Discord <-->|"slash commands"| FitzBot
-    FitzBot -->|"RCON · whitelist add"| MC
+    API -->|"Ollama over VPN"| Nodes["🖥 AI worker nodes<br/>Windows + Ollama"]
+    Nodes -.->|"tunnel"| VPN
+    ESP32["📟 ESP32 bell"] -->|"wss"| Bell
+    Bell -->|"OTA .bin"| GH(["GitHub Releases"])
+    API -->|"/joenet proxy"| Joenet(["Radarr / Sonarr"])
 
-    Promtail -->|"logs"| Loki
-    CAdvisor -->|"metrics"| Prometheus
-    NodeExp -->|"metrics"| Prometheus
-    Loki --> Grafana
-    Prometheus --> Grafana
+    Discord(["💬 Discord"]) <--> Bot
+    Bot -->|"RCON"| MC
+    Bot --> Joenet
 ```
 
-### Services
+Every Spring service exposes each REST endpoint as a gRPC RPC too (port 9090, internal network only). See [`docs/grpc.md`](docs/grpc.md) and [`docs/tracing.md`](docs/tracing.md).
 
-The services and how they interact at the application layer:
-
-```mermaid
-graph LR
-    Browser(["🖥 Browser"])
-    ESP32(["📟 ESP32 Device"])
-
-    subgraph Website["fitz-net-website · React 19 + Vite"]
-        React["App"]
-        AuthCtx["AuthContext\nJWT · localStorage"]
-        ApiSvc["api.js\nfetch wrapper"]
-        WSClient["STOMP WebSocket\nClient"]
-    end
-
-    subgraph API["fitz-net-api · Spring Boot 3.4"]
-        SecFilter["JWT Auth Filter"]
-        Controllers["Controllers"]
-        Services["Services"]
-        Repos["Repositories"]
-        MailSvc["EmailService\nSpring Mail"]
-    end
-
-    subgraph Bell["GamerBell · Spring Boot 3.4"]
-        WSHandler["ButtonWebSocket\nHandler"]
-        BellSvc["ButtonService\nSession Pool"]
-        FirmSvc["FirmwareService\nOTA Cache"]
-    end
-
-    Mongo[("MongoDB")]
-    GitHub(["GitHub Releases\nOTA Firmware"])
-    MailServer(["mail.fitznet.org\ndocker-mailserver"])
-
-    Browser --> React
-    React --> AuthCtx --> ApiSvc
-    ApiSvc -->|"REST / HTTPS"| SecFilter
-    SecFilter --> Controllers --> Services --> Repos --> Mongo
-    Services --> MailSvc -->|"SMTP"| MailServer
-
-    React --> WSClient
-    WSClient -->|"wss"| WSHandler
-    WSHandler --> BellSvc -->|"broadcast"| WSClient
-
-    ESP32 -->|"wss"| WSHandler
-    ESP32 -->|"GET /api/firmware/latest"| FirmSvc
-    FirmSvc -->|"fetch .bin"| GitHub
-```
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- REPOSITORIES -->
 ## Repositories
 
-| Repo | Description |
+| Repo | What it is |
 |---|---|
-| [Fitz-Net](https://github.com/mattlol85/Fitz-Net) | This repo — orchestration hub, architecture docs |
-| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | Spring Boot 3.4 REST API — user management, auth, encryption, email |
-| [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React 19 SPA — dashboard, live board, game stats, auth, password reset |
-| [GamerBell](https://github.com/mattlol85/GamerBell) | Spring Boot WebSocket relay + OTA firmware server for ESP32 bells |
-| [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | C++ / PlatformIO firmware for the physical ESP32 bell button |
-| [Fitz-Bot](https://github.com/mattlol85/Fitz-Bot) | Discord bot — voice-join milestones, media downloads (Radarr/Sonarr), Minecraft whitelist management |
-| [Fitz-Net-Agent-Sandbox](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox) | AI agent workspace + mail server Docker Compose config |
+| [Fitz-Net](https://github.com/mattlol85/Fitz-Net) | This repo — compose files, deploy scripts, AI-node installer, docs, Claude Code agents |
+| [fitz-net-website](https://github.com/mattlol85/fitz-net-website) | React SPA served at [fitznet.org](https://fitznet.org) |
+| [fitz-net-api](https://github.com/mattlol85/fitz-net-api) | REST + gRPC API: auth, permissions, AI chat, node enrollment, LiveBoard, Joenet proxy |
+| [GamerBell](https://github.com/mattlol85/GamerBell) | WebSocket relay and OTA firmware server for the ESP32 bells |
+| [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | ESP32 bell firmware (OLED, captive-portal setup, OTA) |
+| [Fitz-Bot](https://github.com/mattlol85/Fitz-Bot) | Discord bot — milestones, Radarr/Sonarr, Minecraft whitelist |
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- SERVICE DETAILS -->
-## Service Details
-
-### fitz-net-website
-
-**Repo:** [mattlol85/fitz-net-website](https://github.com/mattlol85/fitz-net-website)  
-**Live:** https://fitznet.org
-
-React 19 frontend served via Caddy. Features:
-- Homepage with animated Fitz-Net branding
-- Overwatch 2 tracker — competitive leaderboard, history charts, player avatars
-- LiveBoard — real-time collaborative canvas via STOMP WebSocket
-- GamerBell widget — live status of physical ESP32 button devices
-- Status Dashboard — monitors all service health via Spring Actuator
-- User auth (JWT), profile editing, **forgot-password / reset-password flow**
-
-**Stack:** React 19 · Vite 6 · React Router 7 · Vanilla CSS Modules · Docker
-
----
-
-### fitz-net-api
-
-**Repo:** [mattlol85/fitz-net-api](https://github.com/mattlol85/fitz-net-api)  
-**Live:** https://api.fitznet.org
-
-Spring Boot 3.4 REST API and WebSocket backend. Features:
-- User management (register, login, JWT auth, profile update)
-- Overwatch 2 integration via OverFast API (player stats, ratings, history snapshots)
-- LiveBoard STOMP WebSocket for shared canvas state
-- AES encryption endpoints
-- **Password reset via email** — generates secure tokens, sends reset links via `noreply@fitznet.org`
-
-**Stack:** Java 21 · Spring Boot 3.4 · MongoDB · Spring Security (JWT/BCrypt) · Spring Mail · Gradle · Docker
-
-**Key environment variables:**
-
-| Variable | Purpose |
-|---|---|
-| `JWT_SECRET` | HS256 signing key |
-| `ADMIN_API_KEY` | Optional. Enables the `X-Admin-Key` header for managing user permissions (see below); unset disables it |
-| `MONGO_HOST` / `MONGO_PORT` | MongoDB connection |
-| `MONGO_USERNAME` / `MONGO_PASSWORD` | MongoDB app-user credentials |
-| `MAIL_HOST` | SMTP host (`mail.fitznet.org`) |
-| `MAIL_USERNAME` | SMTP user (`noreply@fitznet.org`) |
-| `MAIL_PASSWORD` | SMTP password |
-| `APP_BASE_URL` | Base URL for reset links (`https://fitznet.org`) |
-
----
-
-### GamerBell
-
-**Repo:** [mattlol85/GamerBell](https://github.com/mattlol85/GamerBell)  
-**Live:** https://gamerbell.fitznet.org
-
-Spring Boot WebSocket relay service bridging physical ESP32 button devices with the Fitz-Net web UI. Also handles over-the-air (OTA) firmware updates for ESP32s via the GitHub Releases API.
-
-**Stack:** Java 21 · Spring Boot 3.4 · Spring WebSocket · Docker
-
----
-
-### Esp32FitznetBell
-
-**Repo:** [mattlol85/Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell)
-
-C++ / PlatformIO firmware for the physical ESP32 bell button. The device connects to **GamerBell** over a WebSocket to broadcast button press/release events and shows the currently active users on a local 0.96" OLED screen. WiFi credentials and the user's display name are configured at first boot through the `FitzNetBell-Setup` WiFiManager captive portal — nothing is hardcoded. New firmware is published as GitHub Releases and pushed to devices over the air via GamerBell's `GET /api/firmware/latest`.
-
-**Hardware:** ESP32 DevKit · SSD1306 OLED (I2C — SDA GPIO 21, SCL GPIO 22) · push button on GPIO 13.
-
-**Stack:** C++ · PlatformIO · Arduino framework · WebSockets · Adafruit SSD1306/GFX · ArduinoJson · WiFiManager · FastLED
-
----
-
-### Fitz-Bot
-
-**Repo:** [mattlol85/Fitz-Bot](https://github.com/mattlol85/Fitz-Bot)
-
-Discord bot for the Fitz-Net community. Built on JDA, it tracks voice-channel activity and posts milestone celebrations, exposes media-download commands backed by Radarr/Sonarr, and manages the **Minecraft server** that runs on a separate VM adjacent to the Docker host.
-
-The `/whitelist <username>` command lets trusted members (gated by a configurable Discord role) add players to the Minecraft whitelist over **RCON**. Together with `white-list=true` + `online-mode=true` on the server, this keeps anonymous crawlers/bots out.
-
-**Slash commands:**
-
-| Command | Purpose |
-|---|---|
-| `/whitelist <username>` | Add a player to the Minecraft whitelist (role-gated) |
-| `/setwhitelistrole <role>` | Choose which Discord role may use `/whitelist` (admin) |
-| `/setbotchannel` · `/getbotchannel` | Configure where milestone messages post |
-| `/joenet download` · `/joenet status` | Search/queue movies & TV (Radarr/Sonarr) |
-
-**Stack:** Java 21 · Spring Boot 3.2 · JDA 5 · Gradle
-
-**Key environment variables:**
-
-| Variable | Purpose |
-|---|---|
-| `DISCORD_BOT_TOKEN` | Discord bot token |
-| `MINECRAFT_RCON_HOST` / `MINECRAFT_RCON_PORT` | Minecraft server RCON endpoint |
-| `MINECRAFT_RCON_PASSWORD` | RCON password (matches `rcon.password` in `server.properties`) |
-| `JOENET_HOST` · `JOENET_RADARR_APIKEY` · `JOENET_SONARR_APIKEY` | Media download integration |
-
-See [`docs/fitz-bot.md`](docs/fitz-bot.md) for the Minecraft topology and whitelist/RCON setup guide.
-
----
-
-### Mail Server
-
-**Config:** [`Fitz-Net-Agent-Sandbox/mail/`](https://github.com/mattlol85/Fitz-Net-Agent-Sandbox)  
-**Live:** https://mail.fitznet.org (webmail) · `mail.fitznet.org:993` (IMAP) · `mail.fitznet.org:587` (SMTP)
-
-Self-hosted email for `fitznet.org` running via Docker Compose alongside the other services.
-
-| Container | Image | Role |
-|---|---|---|
-| `mailserver` | `ghcr.io/docker-mailserver/docker-mailserver` | SMTP (Postfix) + IMAP (Dovecot) + rspamd spam filter + DKIM |
-| `roundcube` | `roundcube/roundcubemail` | Browser-based webmail, proxied through Caddy |
-
-**DNS records required:**
-
-| Type | Name | Value |
-|---|---|---|
-| A | `mail` | `<public IP>` |
-| MX | `@` | `mail.fitznet.org` (priority 10) |
-| TXT | `@` | `v=spf1 mx ~all` |
-| TXT | `_dmarc` | `v=DMARC1; p=quarantine; rua=mailto:admin@fitznet.org` |
-| TXT | `dkim._domainkey` | *(generated by docker-mailserver)* |
-
-> **DMARC:** start at `p=none` only long enough to confirm from the `rua`
-> aggregate reports that all legitimate mail (including the Resend relay)
-> passes SPF/DKIM alignment, then publish `p=quarantine` as above. Move to
-> `p=reject` once quarantine has been clean for a few weeks.
-
-See [`docs/mail-server.md`](docs/mail-server.md) for the full step-by-step setup guide.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- BUILT WITH -->
-
-**User permissions:** users carry a set of permissions that the website uses to show/hide tabs and that the API enforces. Permissions are defined at runtime in MongoDB (`permissions` collection) — only `ADMIN` is built in and cannot be deleted. Create them first, then grant them. Manage them from the website `/admin` page (needs `ADMIN`) or the API, using either an admin user's JWT or the `X-Admin-Key` header:
-
-```bash
-curl -H "X-Admin-Key: $ADMIN_API_KEY" https://<api>/admin/permissions
-curl -H "X-Admin-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -X POST \
-     -d '{"name":"RADARR","description":"Radarr tab"}' https://<api>/admin/permissions
-curl -H "X-Admin-Key: $ADMIN_API_KEY" -X DELETE https://<api>/admin/permissions/RADARR   # also revokes from all users
-curl -H "X-Admin-Key: $ADMIN_API_KEY" https://<api>/admin/users
-curl -H "X-Admin-Key: $ADMIN_API_KEY" -X POST   https://<api>/admin/users/<user>/permissions/RADARR
-curl -H "X-Admin-Key: $ADMIN_API_KEY" -X DELETE https://<api>/admin/users/<user>/permissions/RADARR
-curl -H "X-Admin-Key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -X PUT \
-     -d '{"permissions":["RADARR","SONARR"]}' https://<api>/admin/users/<user>/permissions
-```
-
-There is no seeded admin; grant `ADMIN` to the first user with the API key.
+Each repo has a `.github/agents.md` with its own build commands and conventions.
 
 ## Built With
 
-* [![React][React]][React-url]
-* [![Spring][Spring]][Spring-url]
-* [![Java][Java]][java-url]
-* [![Node][node]][node-url]
-* [![MongoDB][MongoDB]][MongoDB-url]
-* [![Docker][Docker]][Docker-url]
-* [![Caddy][Caddy]][Caddy-url]
-* [![Grafana][Grafana]][Grafana-url]
+| Layer | Tech |
+|---|---|
+| **Frontend** | ![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) ![React Router](https://img.shields.io/badge/React_Router-CA4245?style=flat-square&logo=reactrouter&logoColor=white) ![Three.js](https://img.shields.io/badge/Three.js-000000?style=flat-square&logo=threedotjs&logoColor=white) ![Recharts](https://img.shields.io/badge/Recharts-22B5BF?style=flat-square) ![STOMP](https://img.shields.io/badge/STOMP-333333?style=flat-square) |
+| **Backend** | ![Java](https://img.shields.io/badge/Java_21-ED8B00?style=flat-square&logo=openjdk&logoColor=white) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=flat-square&logo=springboot&logoColor=white) ![gRPC](https://img.shields.io/badge/gRPC-244C5A?style=flat-square&logo=grpc&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white) ![Gradle](https://img.shields.io/badge/Gradle-02303A?style=flat-square&logo=gradle&logoColor=white) ![JDA](https://img.shields.io/badge/JDA_(Discord)-5865F2?style=flat-square&logo=discord&logoColor=white) |
+| **AI** | ![Ollama](https://img.shields.io/badge/Ollama-000000?style=flat-square&logo=ollama&logoColor=white) ![OpenVPN](https://img.shields.io/badge/OpenVPN-EA7E20?style=flat-square&logo=openvpn&logoColor=white) ![PowerShell](https://img.shields.io/badge/PowerShell-5391FE?style=flat-square&logo=powershell&logoColor=white) |
+| **Hardware** | ![ESP32](https://img.shields.io/badge/ESP32-E7352C?style=flat-square&logo=espressif&logoColor=white) ![PlatformIO](https://img.shields.io/badge/PlatformIO-F5822A?style=flat-square&logo=platformio&logoColor=white) ![C++](https://img.shields.io/badge/C++-00599C?style=flat-square&logo=cplusplus&logoColor=white) ![Raspberry Pi](https://img.shields.io/badge/Raspberry_Pi-A22846?style=flat-square&logo=raspberrypi&logoColor=white) |
+| **Infra** | ![Proxmox](https://img.shields.io/badge/Proxmox-E57000?style=flat-square&logo=proxmox&logoColor=white) ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white) ![Caddy](https://img.shields.io/badge/Caddy-1F88C0?style=flat-square&logo=caddy&logoColor=white) ![Cloudflare](https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) |
+| **Observability** | ![Grafana](https://img.shields.io/badge/Grafana-F46800?style=flat-square&logo=grafana&logoColor=white) ![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat-square&logo=prometheus&logoColor=white) ![Loki](https://img.shields.io/badge/Loki-F2CC0C?style=flat-square&logo=grafana&logoColor=black) |
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- GETTING STARTED -->
 ## Getting Started
 
-Each component lives in its own repository. Clone the ones you need:
+Copy `.env.example` to `.env`, fill it in, then bring up the core stack (Caddy, website, API, GamerBell, MongoDB):
 
 ```sh
-git clone https://github.com/mattlol85/fitz-net-api.git
-git clone https://github.com/mattlol85/fitz-net-website.git
-git clone https://github.com/mattlol85/GamerBell.git
-git clone https://github.com/mattlol85/Esp32FitznetBell.git
-```
-
-**fitz-net-api** — requires Java 21 and MongoDB:
-```sh
-cd fitz-net-api
-./gradlew bootRun
-```
-
-**fitz-net-website** — requires Node.js:
-```sh
-cd fitz-net-website
-npm install
-npm run dev
-```
-
-**GamerBell** — requires Java 21:
-```sh
-cd GamerBell
-./gradlew bootRun --args='--spring.profiles.active=dev'
-```
-
-**Esp32FitznetBell** — requires [PlatformIO](https://platformio.org/) and an ESP32 board:
-```sh
-cd Esp32FitznetBell
-pio run                 # Compile firmware
-pio run --target upload  # Flash to a connected ESP32 over USB
-pio device monitor       # Serial logs (115200 baud)
-# First boot: connect to the "FitzNetBell-Setup" WiFi AP to set WiFi + display name
-```
-
-**Mail stack** — run on the Proxmox Docker host:
-```sh
-cd Fitz-Net-Agent-Sandbox/mail
+cp .env.example .env
 docker compose up -d
-# First time: create mailboxes and generate DKIM
-docker exec -ti mailserver setup email add matt@fitznet.org
-docker exec -ti mailserver setup email add noreply@fitznet.org
-docker exec -ti mailserver setup config dkim
 ```
 
-**Observability stack** — run on the Docker host:
+Observability runs as a separate stack:
+
 ```sh
 cd observability
-cp .env.example .env   # then set GRAFANA_ADMIN_PASSWORD to a strong value
+cp .env.example .env   # set GRAFANA_ADMIN_PASSWORD
 docker compose up -d
-# Grafana UI available at https://logs.fitznet.org (login: admin / $GRAFANA_ADMIN_PASSWORD)
-# GRAFANA_ADMIN_PASSWORD only applies on first start; on an existing install rotate it with:
-#   docker exec -it grafana grafana cli admin reset-admin-password '<new password>'
 ```
 
-See each repo's `.github/agents.md` for full conventions, build commands, and architecture details.  
-See [`docs/mail-server.md`](docs/mail-server.md) for the complete mail server setup guide.
+To work on a single service, clone its repo and follow its README (`./gradlew bootRun`, `npm run dev`, `pio run`, …).
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### Permissions
 
+Users carry runtime-defined permissions (stored in Mongo; only `ADMIN` is built in) that the website uses to show tabs and the API enforces. Manage them from the website's `/admin` page, or with the `X-Admin-Key` header when `ADMIN_API_KEY` is set. There is no seeded admin — grant the first one with the key:
 
+```sh
+curl -H "X-Admin-Key: $ADMIN_API_KEY" -X POST https://<api>/admin/users/<user>/permissions/ADMIN
+```
 
-<!-- ROADMAP -->
-## Roadmap
+## Docs
 
-- [x] React frontend + Spring Boot API
-- [x] JWT authentication and user management
-- [x] Overwatch 2 stats tracker and leaderboard
-- [x] LiveBoard — real-time collaborative canvas
-- [x] ESP32 physical bell button with WebSocket integration (GamerBell + Esp32FitznetBell)
-- [x] OTA firmware updates for ESP32 devices via GitHub Releases
-- [x] Self-hosted on Proxmox + Docker behind Caddy reverse proxy
-- [x] Observability stack — Grafana, Loki, Prometheus, Promtail, cAdvisor, node-exporter
-- [x] Self-hosted email at fitznet.org (docker-mailserver + Roundcube)
-- [x] Password reset via email
-- [ ] Raspberry Pi remote client with hardware buttons
-    - [ ] 3D print enclosure and upload files to GitHub
-- [ ] Complete a 1.0 release
+| Doc | Covers |
+|---|---|
+| [`ai-chat-contract.md`](docs/ai-chat-contract.md) | Matt-GPT API contract between website and API |
+| [`openvpn-ai-node-handoff.md`](docs/openvpn-ai-node-handoff.md) · [`scripts/ai-node-installer`](scripts/ai-node-installer/README.md) | Enrolling a GPU as an AI worker node |
+| [`grpc.md`](docs/grpc.md) | REST → gRPC map and the "always both" rule |
+| [`tracing.md`](docs/tracing.md) | Correlation IDs across HTTP, gRPC and WebSocket |
+| [`joenet.md`](docs/joenet.md) | Radarr/Sonarr admin panel and proxy |
+| [`fitz-bot.md`](docs/fitz-bot.md) | Fitz-Bot commands and Minecraft RCON setup |
+| [`proxmox-self-hosted-runner-handoff.md`](docs/proxmox-self-hosted-runner-handoff.md) · [`scripts/proxmox`](scripts/proxmox/README.md) | Self-hosted runner and deploys |
+| [`resource-limits.md`](docs/resource-limits.md) · [`mongo-auth-migration.md`](docs/mongo-auth-migration.md) | Container memory limits, Mongo auth |
 
-See the [open issues](https://github.com/mattlol85/Fitz-Net/issues) for a full list of proposed features and known issues.
+## Claude Code
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+`.claude/` holds agents and skills for working across the six repos — e.g. `sync-siblings` (pull everything), `cross-repo-feature` (contract-first multi-repo changes), `ship-it` / `release-conductor` (PR → merge → tag → deploy) and `vulnScan`. Agent rules live in [`.github/agents.md`](.github/agents.md).
 
-
-
-<!-- CONTRIBUTING -->
 ## Contributing
 
-1. Fork the relevant repo
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit using conventional commits:
-   ```
-   feat(scope): what you added
-   fix(scope): what you fixed
-   chore(scope): maintenance change
-   ```
-4. Push and open a Pull Request against `main`
+Branch as `feature/<name>`, use conventional commits (`feat(scope): …`, `fix(scope): …`, `chore(scope): …`) and open a PR against `main`.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- CLAUDE CODE -->
-## Claude Code agents & skills
-
-This hub ships custom [Claude Code](https://claude.com/claude-code) agents and skills for the cross-repo orchestration work this repo exists to do. They live in `.claude/`.
-
-**Agents** (`.claude/agents/`):
-
-| Agent | What it does |
-|---|---|
-| `repo-sweeper` | Read-only sweep of all six sibling repos — pulls each, lists open issues, returns a ranked table clustered by repo/theme/effort |
-| `pr-triage` | Scores every open PR across the six repos for merge confidence (diff size, CI, contract surfaces touched) and lists what is safe to auto-merge + tag |
-| `cross-repo-feature` | Implements a multi-repo feature per the numbered workflow in `.github/agents.md` — matching branches, API contract first, backend before frontend, linked PRs |
-| `release-conductor` | The merge → tag → deploy → handoff tail: verifies CI, merges, cuts semver tags, triggers Deploy to Proxmox, writes a prod handoff |
-| `java-spring-agent` | Java 21 / Spring Boot specialist for `fitz-net-api`, `GamerBell`, `Fitz-Bot` |
-| `react-frontend-agent` | React 19 / Vite specialist for `fitz-net-website` |
-| `esp32-cpp-agent` | C++ / PlatformIO specialist for `Esp32FitznetBell` |
-
-**Skills** (`.claude/skills/`):
-
-| Skill | What it does |
-|---|---|
-| `sync-siblings` | Runs the mandatory six-repo `git pull` and prints a per-repo branch/ahead-behind/dirty summary |
-| `prod-handoff` | Template + checklist for the `docs/*-handoff.md` runbooks that live on the prod Proxmox VM |
-| `deploy-to-proxmox` | Documents the web-triggered deploy workflow, its `tag`/`latest` input, and post-deploy `/actuator/health` checks |
-| `local-fitznet` | Spin up / tear down the full local stack via `docker-compose.yml`, with the URLs to check |
-| `arch-visualize` | How the website's 3D architecture graph is built and updated — data model, node/link conventions, live preview |
-| `vulnScan` | Language-agnostic CVE scan (Gradle, npm, PlatformIO): upgrades vulnerable packages, verifies build + tests, leaves changes uncommitted. `--report-only` to just scan |
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+MIT — see [`LICENSE`](LICENSE).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-## Contact
-
-Matt - [@mattylol85](https://twitter.com/mattylol85) - mattlol85@gmail.com
-
-Project Link: [https://github.com/mattlol85/Fitz-Net](https://github.com/mattlol85/Fitz-Net)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/mattlol85/Fitz-Net.svg?style=for-the-badge
-[contributors-url]: https://github.com/mattlol85/Fitz-Net/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/mattlol85/Fitz-Net.svg?style=for-the-badge
-[forks-url]: https://github.com/mattlol85/Fitz-Net/network/members
-[stars-shield]: https://img.shields.io/github/stars/mattlol85/Fitz-Net.svg?style=for-the-badge
-[stars-url]: https://github.com/mattlol85/Fitz-Net/stargazers
-[issues-shield]: https://img.shields.io/github/issues/mattlol85/Fitz-Net.svg?style=for-the-badge
-[issues-url]: https://github.com/mattlol85/Fitz-Net/issues
-[license-shield]: https://img.shields.io/github/license/mattlol85/Fitz-Net.svg?style=for-the-badge
-[license-url]: https://github.com/mattlol85/Fitz-Net/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/mattfitzbk
-
-[product-screenshot]: images/screenshot.png
-
-[node]: https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white
-[node-url]: https://nodejs.org/
-
-[java]: https://img.shields.io/badge/Java-FFA500?style=for-the-badge&logo=openjdk&logoColor=white
-[java-url]: https://www.java.com/
-
-[spring]: https://img.shields.io/badge/Spring-6DB33F?style=for-the-badge&logo=spring&logoColor=white
-[spring-url]: https://spring.io/
-
-[React]: https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black
-[React-url]: https://reactjs.org/
-
-[MongoDB]: https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white
-[MongoDB-url]: https://www.mongodb.com/
-
-[Docker]: https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white
-[Docker-url]: https://www.docker.com/
-
-[Caddy]: https://img.shields.io/badge/Caddy-1F88C0?style=for-the-badge&logo=caddy&logoColor=white
-[Caddy-url]: https://caddyserver.com/
-
-[Grafana]: https://img.shields.io/badge/Grafana-F46800?style=for-the-badge&logo=grafana&logoColor=white
-[Grafana-url]: https://grafana.com/
