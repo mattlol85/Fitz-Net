@@ -8,7 +8,7 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 
    Fallback (if the website's unavailable): call the endpoint directly with a JWT copied out of browser dev tools:
    ```bash
-   curl -X POST https://api.fitznet.doomdns.org/node/enrollment-token \
+   curl -X POST https://api.fitznet.org/node/enrollment-token \
      -H "Authorization: Bearer <your JWT>" \
      -H "Content-Type: application/json" \
      -d '{"label": "brother-pc"}'
@@ -34,6 +34,23 @@ This is what you package up and send to someone contributing a GPU (e.g. your br
 That's it — Ollama is installed for the signed-in model owner if missing and configured with `OLLAMA_HOST=0.0.0.0`. The installer briefly starts it under that owner to verify the API and models, then stops it before completing. `FitzNetOllamaServe` is a demand-only task with no logon or boot trigger. OpenVPN is also left disconnected with its service set to Manual. Vendor-created Ollama and OpenVPN GUI sign-in entries are backed up and disabled, so they cannot bypass this manual policy. The node owner starts and stops both from the desktop console. A lightweight scheduled heartbeat still runs every 2 minutes so the website promptly reflects `ONLINE` or `OFFLINE`; it does not load Ollama, the model, GPU, or VPN. Port 11434 is opened either on Private networks for LAN mode or only on the OpenVPN adapter for VPN mode. The script is safe to re-run if anything needs retrying; an existing node keeps its registration and does not need another enrollment token.
 
 If VPN installation is selected, `node.ovpn` is required. The installer rewrites it as a narrow split tunnel: only traffic to the API host (`192.168.1.59`) uses OpenVPN, never the node owner's general internet traffic. A manually controlled node remains `OFFLINE` until its owner connects the VPN.
+
+## Moving an existing node to `api.fitznet.org`
+
+Nodes installed before the Cloudflare Tunnel migration saved
+`https://api.fitznet.doomdns.org` in `node.json`. Their heartbeats stop
+when the router closes 443. On each such node, in an **elevated** PowerShell:
+
+```powershell
+$p = "C:\ProgramData\FitzNetNode\node.json"
+$c = Get-Content $p -Raw | ConvertFrom-Json
+$c.apiBaseUrl = "https://api.fitznet.org"
+$c | ConvertTo-Json -Depth 10 | Set-Content $p
+```
+
+The next heartbeat uses the new URL. Nothing else on the node changes, and the
+OpenVPN profile still points at `fitznet.doomdns.org` (UDP to the Pi), which is
+unaffected.
 
 ## Turning the VPN on and off
 

@@ -125,8 +125,15 @@ before they update, they go offline and can't receive the fix over the air.
 3. **Soak.** In Grafana, confirm every known `deviceMac` reports v0.17.0 or later.
    Bells that are powered off still run old firmware. Keep the old path for a
    couple of weeks, or until every MAC has checked in.
-4. **Close the old path.** Move `fitznet.org` / `api.fitznet.org` to the tunnel
-   (`http://` Caddy sites), drop the doomdns sites, remove the `80`/`443`
-   port publishing on Caddy, close the router forwards and stop the DDNS
-   updater. Remove or proxy any DNS-only `A` records that still expose the
-   home IP.
+4. **Close the old path.** Done 2026-11-18 without waiting for the bells, by
+   choice. Bells on ≤ v0.16.0 go offline and need a USB reflash. Steps:
+   [`cloudflare-tunnel-close-ports-handoff.md`](cloudflare-tunnel-close-ports-handoff.md).
+   - **Close only router 80/443** (to the Docker VM).
+   - **Keep the DDNS updater and `fitznet.doomdns.org`.** OpenVPN (AI worker
+     nodes, UDP to the Pi) and the `generate-ai-node-package` workflow (SSH
+     :22) still use that hostname. Those forwards stay open.
+   - Existing AI nodes must have `apiBaseUrl` in `node.json` changed to
+     `https://api.fitznet.org` first
+     ([`scripts/ai-node-installer`](../scripts/ai-node-installer/README.md)).
+   - `logs.fitznet.org` (Grafana) moves to the tunnel too, as a proxied CNAME
+     plus an `http://` Caddy site. Put Cloudflare Access in front of it next.
