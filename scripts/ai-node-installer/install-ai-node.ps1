@@ -52,7 +52,7 @@
 param(
     [string]$Token,
     [string]$NodeName = $env:COMPUTERNAME,
-    [string]$ApiBaseUrl = "https://api.fitznet.doomdns.org",
+    [string]$ApiBaseUrl = "https://api.fitznet.org",
     [string]$OllamaAddress,
     [ValidateSet("yes", "no", "y", "n", "")]
     [string]$InstallVpn,
