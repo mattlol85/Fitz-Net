@@ -49,7 +49,7 @@ Group the issues along three axes:
 
 - **Repo** — which of the six it lives in.
 - **Theme** — e.g. auth, WebSocket/bell schema, OTA firmware, observability,
-  mail, Minecraft/RCON, AI nodes, deploy/infra, docs, dependency bumps.
+  Minecraft/RCON, AI nodes, deploy/infra, docs, dependency bumps.
 - **Effort** — S (a few lines / config), M (one repo, one layer), L (multi-layer
   or multi-repo cross-cutting change).
 
