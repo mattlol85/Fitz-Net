@@ -132,10 +132,18 @@ before they update, they go offline and can't receive the fix over the air.
    ```sh
    curl -si -H 'x-ESP32-version: v0.16.0' https://gamerbell.fitznet.org/api/firmware/latest | head -1
    ```
-2. **Fallback firmware.** From v0.17.0 the bell tries `gamerbell.fitznet.org`
-   first and falls back to the doomdns host after repeated failures. It
-   remembers the last host that worked in NVS. Release it; bells pick it up within
-   about a minute (OTA check at boot and every 60 s).
+2. **Fallback firmware.** Released as **v0.17.0** on 2026-11-18
+   (Esp32FitznetBell #25).
+   - **Host order:** the bell tries `gamerbell.fitznet.org` first. It moves to
+     the next host after 30 s with Wi-Fi up but no WebSocket.
+   - **Why a timer:** a failed connect fires no event in the WebSocket
+     library, so counting failures would miss it.
+   - **Memory:** it saves the last host that worked in NVS
+     (`app-config/hostIdx`), so a reboot starts there.
+   - **Grafana:** it logs `Connected via host …` and `Failover A -> B` to
+     GamerBell's `/api/devices/log`.
+   - **Rollout:** bells pick it up within about a minute of coming online (OTA
+     check at boot and every 60 s), over either host.
 3. **Soak.** In Grafana, confirm every known `deviceMac` reports v0.17.0 or later.
    Bells that are powered off still run old firmware. Keep the old path for a
    couple of weeks, or until every MAC has checked in.
