@@ -14,7 +14,7 @@ Decisions taken with the owner before this was written:
 | History model | **Linear.** Regenerate replaces the answer, edit truncates what follows. Messages store `parentId` so branching can be added later without a migration. |
 | Context overflow | **Trim, then offer a summary.** Oldest turns are left out of the prompt (never deleted) with a visible warning; "Summarise older turns" is an explicit action. |
 | Model metadata | **The API fetches it from each node's Ollama** (short cache). The heartbeat only gains two optional VRAM fields. |
-| `ollama.keep-alive` | Folded into this work (same property name and default as the unmerged `feature/ollama-keep-alive` edits). |
+| `ollama.keep-alive` | Folded into this work. Shipped at `30m`, which left models sitting in node owners' memory long after anyone chatted; now `10m`, with a separate `ollama.warmup-keep-alive` of `5m` for warm-ups (section 5). |
 
 ---
 
@@ -218,9 +218,15 @@ flight), `unavailable` (no node can serve it right now; `message` says why, `nod
 
 The server resolves the target with the routing rules, returns immediately, and — when the model is
 not loaded — preloads it on a background thread with Ollama's empty request
-(`POST /api/generate {"model": …, "keep_alive": ollama.keep-alive}`). Concurrent warm-ups for the
-same node + model share one in-flight request. Every chat request also sends
-`keep_alive: ollama.keep-alive` (default `30m`).
+(`POST /api/generate {"model": …, "keep_alive": ollama.warmup-keep-alive}`). Concurrent warm-ups for
+the same node + model share one in-flight request. Every chat request sends
+`keep_alive: ollama.keep-alive` (default `10m`).
+
+A warm-up is speculative — it loads a model before any message exists — so it has its own, shorter
+`ollama.warmup-keep-alive` (default `5m`); the first chat then extends the model's stay to
+`ollama.keep-alive`. Keep both short: nodes are people's own PCs, a loaded model holds several GB
+of their VRAM (or system RAM when it does not fit), and a request's `keep_alive` overrides any
+`OLLAMA_KEEP_ALIVE` the node owner sets, so the API alone decides how long that memory is held.
 
 The client calls this when a model is **selected** (not hovered), debounced.
 
@@ -689,7 +695,8 @@ toward `activeGenerations`. They are deprecated: the website stops calling them.
 ## 15. Configuration
 
 ```properties
-ollama.keep-alive=${OLLAMA_KEEP_ALIVE:30m}
+ollama.keep-alive=${OLLAMA_KEEP_ALIVE:10m}
+ollama.warmup-keep-alive=${OLLAMA_WARMUP_KEEP_ALIVE:5m}
 ai.node.stale-after=${AI_NODE_STALE_AFTER:5m}
 ai.catalog.models-ttl=${AI_CATALOG_MODELS_TTL:60s}
 ai.catalog.loaded-ttl=${AI_CATALOG_LOADED_TTL:5s}
