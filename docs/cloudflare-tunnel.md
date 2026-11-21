@@ -41,7 +41,9 @@ That lets each DNS record flip with no downtime.
 Lori-Net is the website image again: the SPA picks the pink "LN" variant from
 the hostname and gates the whole site on the `LORINET_ACCESS` permission. It
 was born on the tunnel, so it only has an `http://` site (`caddy_2` on the
-website service) and no legacy HTTPS site or doomdns name.
+website service) and no legacy HTTPS site or doomdns name. Its Recipes tab
+holds each user's private recipe book (served by the `/recipe-book`,
+`/recipes` and `/recipe-images` REST and gRPC routes).
 
 ```sh
 curl -si -H 'Host: lori.fitznet.org' http://127.0.0.1/ | head -1             # 200, not 308

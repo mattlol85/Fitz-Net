@@ -12,7 +12,7 @@ bean the REST route uses, so validation, `@PreAuthorize`, metrics and logging ar
 
 | Repo | Proto | Services | Port |
 |---|---|---|---|
-| `fitz-net-api` | `src/main/proto/fitznet/api/v1/{user,permission,node,info,ai_chat}.proto` | `UserService`, `PermissionService`, `NodeService`, `InfoService`, `AiChatService` | `GRPC_PORT` (9090) |
+| `fitz-net-api` | `src/main/proto/fitznet/api/v1/{user,permission,node,info,ai_chat,recipes}.proto` | `UserService`, `PermissionService`, `NodeService`, `InfoService`, `AiChatService`, `RecipeBookService`, `RecipeService`, `RecipeImageService` | `GRPC_PORT` (9090) |
 | `GamerBell` | `src/main/proto/fitznet/gamerbell/v1/gamerbell.proto` | `GamerBellService` | `GRPC_PORT` (9090) |
 | `Fitz-Bot` | `src/main/proto/fitznet/bot/v1/bot.proto` | `BotService`, `LogService` | `GRPC_PORT` (9090) |
 
@@ -59,6 +59,10 @@ so `grpcurl -plaintext host:9090 list` works.
 | `GET /admin/users` | `PermissionService/ListUsers` |
 | `GET/PUT /admin/users/{u}/permissions` | `PermissionService/{GetUserPermissions,SetUserPermissions}` |
 | `POST/DELETE /admin/users/{u}/permissions/{p}` | `PermissionService/{GrantUserPermission,RevokeUserPermission}` |
+| `GET /recipe-book`, `PUT /recipe-book` | `RecipeBookService/{GetRecipeBook,UpdateRecipeBook}` |
+| `GET /recipes`, `GET /recipes/ingredients` | `RecipeService/{ListRecipes,GetIngredientIndex}` |
+| `GET/PUT/DELETE /recipes/{id}`, `POST /recipes` | `RecipeService/{GetRecipe,UpdateRecipe,DeleteRecipe,CreateRecipe}` |
+| `POST /recipe-images`, `GET /recipe-images/{id}` | `RecipeImageService/{UploadRecipeImage,GetRecipeImage}` |
 
 Request, response and stream-event shapes for every `/ai/**` route and `AiChatService` RPC are in
 [`ai-chat-contract.md`](ai-chat-contract.md).
