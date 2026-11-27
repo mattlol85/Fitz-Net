@@ -16,6 +16,7 @@ One **correlation id** follows a request from the browser through every backend 
 - Inbound ids must match `[A-Za-z0-9._:-]{1,64}`; anything else is replaced so a caller cannot forge log lines.
 - CORS exposes `X-Request-ID` / `X-Correlation-ID` so the browser can read them.
 - The ESP32 bell sends no id; GamerBell falls back to the WebSocket session id for it.
+- The Marine Park relay (`marine-park-relay`, .NET, Marine-Park repo) logs JSON with the room's join code as the `correlationId` scope, so one game's whole life greps by its code. Client addresses are never logged.
 
 To follow a request: grab the `X-Correlation-ID` response header in the browser devtools and grep it in each service's logs.
 When adding an endpoint or transport, keep the id in the MDC for the whole call and add a test.

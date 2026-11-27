@@ -26,6 +26,7 @@ Client ──https──▶ Cloudflare edge ──tunnel──▶ cloudflared �
 | `fitznet.org` | `http://caddy:80` | `http://fitznet.org` (website `caddy_1`) |
 | `api.fitznet.org` | `http://caddy:80` | `http://api.fitznet.org` (API `caddy_1`) |
 | `lori.fitznet.org` | `http://caddy:80` | `http://lori.fitznet.org` (website `caddy_2`, Lori-Net) |
+| `relay.fitznet.org` | `http://caddy:80` | `http://relay.fitznet.org` (`marine-park-relay`, Marine Park join codes) |
 
 During the migration each service has **both** a legacy HTTPS site
 (`caddy_0`) and a tunnel `http://` site (`caddy_1`). An explicit `http://`
@@ -48,6 +49,29 @@ holds each user's private recipe book (served by the `/recipe-book`,
 ```sh
 curl -si -H 'Host: lori.fitznet.org' http://127.0.0.1/ | head -1             # 200, not 308
 curl -s  -H 'Host: lori.fitznet.org' http://127.0.0.1/manifest.json | grep Lori-Net
+```
+
+### Marine Park relay (`relay.fitznet.org`)
+
+A WebSocket relay for the Marine Park game: hosts get a 6-character join code
+and friends join by code, with every frame passing through the relay
+(mattlol85/Marine-Park issue #2; source in its `Server/Relay/`). Tunnel-only
+like Lori-Net. Cloudflare side, set up 2026-11-27:
+
+- tunnel route `relay.fitznet.org` → `http://caddy:80`, before the catch-all;
+- proxied `CNAME relay` → `<tunnel-id>.cfargotunnel.com`;
+- Configuration Rule on that host: Browser Integrity Check off, Security Level
+  essentially off. Game clients aren't browsers, so a challenge would silently
+  break them (same reasoning as GamerBell).
+
+The relay does its own rate limiting (rooms and join attempts per
+`CF-Connecting-IP`), because the Free plan's one rate-limiting rule is already
+used. Its Caddy site sets `reverse_proxy.stream_close_delay: 6h` so Caddy
+reloads (any container change) don't drop games. Runbook:
+[`marine-park-relay-vm-handoff.md`](marine-park-relay-vm-handoff.md).
+
+```sh
+curl -si -H 'Host: relay.fitznet.org' http://127.0.0.1/healthz | head -1     # 200, not 308
 ```
 
 ### Website and API

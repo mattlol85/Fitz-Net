@@ -107,6 +107,36 @@ services:
     depends_on:
       - fitz-net-api
 
+  # Marine Park's WebSocket relay: internet play by 6-character join code
+  # (mattlol85/Marine-Park issue #2, source in its Server/Relay). It holds rooms
+  # in memory and needs no database, so it isn't on `internal`.
+  marine-park-relay:
+    image: mattlol85/marine-park-relay:latest
+    container_name: marine-park-relay
+    mem_limit: 128m
+    restart: unless-stopped
+    # Don't set ASPNETCORE_URLS here: the image listens on 8080 (relay) and
+    # 9464 (metrics), and overriding it with only 8080 silently drops metrics.
+    environment:
+      Relay__MaxRooms: "32"
+      Relay__MaxPeersPerRoom: "8"
+    networks:
+      - fitznet
+    # 9464 is Prometheus /metrics: Docker-network only, not routed through Caddy.
+    expose:
+      - "8080"
+      - "9464"
+    labels:
+      # Tunnel-only, like Lori-Net: Cloudflare terminates TLS and cloudflared
+      # sends plain HTTP, so this site must be http://.
+      caddy: http://relay.fitznet.org
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      # caddy-docker-proxy reloads Caddy on every container change (any
+      # Fitz-Net deploy). Without this, the reload closes open WebSockets and
+      # every game in progress drops.
+      caddy.reverse_proxy.stream_close_delay: 6h
+      caddy_network: fitznet
+
   mongo:
     image: mongo:8.0
     container_name: fitz-net-api-mongo

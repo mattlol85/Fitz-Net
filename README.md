@@ -31,6 +31,7 @@ Fitz-Net is a personal full-stack platform running on a Proxmox box at home. It 
 - **AI worker nodes** — volunteer Windows GPUs that run Ollama, join over OpenVPN and register themselves with the API.
 - **GamerBell + ESP32 bell** — a physical button that broadcasts presses to the site over WebSocket and updates its firmware over the air.
 - **Fitz-Bot** — Discord bot for voice milestones, media requests and Minecraft whitelisting over RCON.
+- **Marine Park relay** — WebSocket relay at `relay.fitznet.org` that lets friends join a [Marine Park](https://github.com/mattlol85/Marine-Park) game by a 6-character code, with no port forwarding.
 - **Observability** — Grafana, Loki, Promtail, Prometheus, cAdvisor and node-exporter, with a correlation ID traced through every request.
 
 This repo is the **orchestration hub**: Docker Compose files, deploy scripts, the AI-node installer, cross-repo docs and the Claude Code agents/skills. Application code lives in the sibling repos.
@@ -47,6 +48,7 @@ graph TD
             Website["fitz-net-website"]
             API["fitz-net-api"]
             Bell["GamerBell"]
+            Relay["marine-park-relay"]
             Mongo[("MongoDB")]
             Obs["Grafana · Loki · Prometheus"]
         end
@@ -59,7 +61,8 @@ graph TD
     end
 
     Router -->|"80/443"| Caddy
-    Caddy --> Website & API & Bell & Obs
+    Caddy --> Website & API & Bell & Relay & Obs
+    Game["🐟 Marine Park game"] -->|"wss · join code"| Relay
     API --> Mongo
     API -->|"Ollama over VPN"| Nodes["🖥 AI worker nodes<br/>Windows + Ollama"]
     Nodes -.->|"tunnel"| VPN
@@ -84,6 +87,7 @@ Every Spring service exposes each REST endpoint as a gRPC RPC too (port 9090, in
 | [GamerBell](https://github.com/mattlol85/GamerBell) | WebSocket relay and OTA firmware server for the ESP32 bells |
 | [Esp32FitznetBell](https://github.com/mattlol85/Esp32FitznetBell) | ESP32 bell firmware (OLED, captive-portal setup, OTA) |
 | [Fitz-Bot](https://github.com/mattlol85/Fitz-Bot) | Discord bot — milestones, Radarr/Sonarr, Minecraft whitelist |
+| [Marine-Park](https://github.com/mattlol85/Marine-Park) | Unity co-op game; its `Server/Relay` join-code relay runs on the Docker VM ([runbook](docs/marine-park-relay-vm-handoff.md)) |
 
 Each repo has a `.github/agents.md` with its own build commands and conventions.
 

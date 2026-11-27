@@ -19,6 +19,8 @@ Fitz-Net is a personal full-stack platform consisting of six sibling repositorie
 
 For deep development context on each repo, see their individual `.github/agents.md` files.
 
+**Also hosted here:** the [Marine-Park](https://github.com/mattlol85/Marine-Park) game's WebSocket join-code relay (`marine-park-relay` in `docker-compose.yml`, public at `wss://relay.fitznet.org` through the tunnel). Its code, tests and image build live in Marine-Park's `Server/Relay/`, not in the six repos above; this repo owns only its compose service, `scripts/proxmox/deploy-marine-park-relay.sh`, the Prometheus job and [`docs/marine-park-relay-vm-handoff.md`](../docs/marine-park-relay-vm-handoff.md). It's .NET with WebSocket only, so the REST + gRPC rule below doesn't apply, and it isn't part of the sibling `git pull`.
+
 ---
 
 ## Before You Start
