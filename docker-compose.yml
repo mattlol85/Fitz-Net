@@ -50,6 +50,11 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       JOENET_HOST: ${JOENET_HOST:-joenet.doomdns.org}
+      # How long an AI node's Ollama keeps a model in memory after a chat, and
+      # after a warm-up (a model picked but not yet used). Nodes are people's
+      # own PCs and these override the node's own setting, so keep them short.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-10m}
+      OLLAMA_WARMUP_KEEP_ALIVE: ${OLLAMA_WARMUP_KEEP_ALIVE:-5m}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       MONGO_HOST: mongo
       MONGO_PORT: 27017
