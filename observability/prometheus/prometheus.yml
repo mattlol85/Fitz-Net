@@ -25,3 +25,10 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['gamerbell:8080']
+
+  # Marine Park relay (marinepark_relay_* rooms, peers, bytes, closes by code).
+  # Metrics are on their own port, which Caddy never routes.
+  - job_name: marine-park-relay
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['marine-park-relay:9464']

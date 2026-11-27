@@ -16,6 +16,15 @@ Each script takes a Docker Hub tag as its only argument (defaults to `latest`), 
 
 `deploy-gamerbell.sh` already exists on the server following this same convention but is not tracked in any repo.
 
+## Marine Park relay
+
+`deploy-marine-park-relay.sh` deploys `mattlol85/marine-park-relay` (the game's join-code relay at `relay.fitznet.org`, built by Marine-Park's `Relay` workflow). Same convention as above, plus two extras: it prints how many rooms are open before the restart (a restart ends every game), and it waits for the container's healthcheck and exits non-zero if it never goes healthy. Image tags are `latest` and `sha-<7-char commit>`. First-time setup and verification: [`docs/marine-park-relay-vm-handoff.md`](../../docs/marine-park-relay-vm-handoff.md).
+
+```bash
+scp scripts/proxmox/deploy-marine-park-relay.sh proxmoxvm:/tmp/
+ssh -t proxmoxvm "sudo install -m 755 /tmp/deploy-marine-park-relay.sh /opt/fitznet/scripts/ && rm /tmp/deploy-marine-park-relay.sh"
+```
+
 ## AI-node VPN route
 
 Remote AI-node chat also requires the Docker host to route the OpenVPN subnet

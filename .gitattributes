@@ -1,0 +1,2 @@
+# Shell scripts get scp'd from Windows checkouts to Linux hosts; CRLF breaks bash there.
+*.sh text eol=lf

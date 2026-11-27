@@ -15,6 +15,7 @@ Limits are about 1.5–2× the steady-state usage measured with `docker stats` o
 | main | fitz-net-website | 10 MiB | 128m | nginx static |
 | main | mongo | 124 MiB | 768m | WiredTiger cache sizes itself from the cgroup limit |
 | main | caddy | 22 MiB | 128m | |
+| main | marine-park-relay | not yet measured | 128m | .NET 10, workstation GC; rooms in memory. Re-measure with games running |
 | observability | loki | 210 MiB | 768m | query spikes |
 | observability | grafana | 259 MiB | 512m | |
 | observability | prometheus | 150 MiB | 512m | head-block compaction spikes |
